@@ -34,7 +34,7 @@ test("server-renders the Scouter dashboard", async () => {
 });
 
 test("keeps the product metadata and private-doc policy explicit", async () => {
-  const [layout, page, dashboard, rolesRoute, icon, gitignore, license, packageJson] = await Promise.all([
+  const [layout, page, dashboard, rolesRoute, icon, gitignore, license, readme, packageJson] = await Promise.all([
     readFile(new URL("../../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/components/scouter-dashboard.tsx", import.meta.url), "utf8"),
@@ -42,6 +42,7 @@ test("keeps the product metadata and private-doc policy explicit", async () => {
     readFile(new URL("../../app/icon.svg", import.meta.url), "utf8"),
     readFile(new URL("../../.gitignore", import.meta.url), "utf8"),
     readFile(new URL("../../LICENSE", import.meta.url), "utf8"),
+    readFile(new URL("../../README.md", import.meta.url), "utf8"),
     readFile(new URL("../../package.json", import.meta.url), "utf8"),
   ]);
 
@@ -64,7 +65,9 @@ test("keeps the product metadata and private-doc policy explicit", async () => {
   assert.match(icon, /rx="14"/);
   assert.match(gitignore, /\*\.md/);
   assert.match(gitignore, /!README\.md/);
+  assert.match(gitignore, /\/\.openai\//);
   assert.match(license, /MIT License/);
+  assert.match(readme, /\[MIT License\]\(\.\/LICENSE\)/);
   assert.match(packageJson, /"name": "scouter"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 });

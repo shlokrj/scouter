@@ -45,5 +45,12 @@ next-env.d.ts
 *.md
 !README.md
 /slop.md
+/.openai/
 /.ai/
 /.codex/
+/.claude/
+/.cursor/
+/.continue/
+/.opencode/
+/.windsurf/
+/.agents/
