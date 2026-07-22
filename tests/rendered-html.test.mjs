@@ -23,9 +23,9 @@ test("server-renders the Scouter dashboard", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>Scouter — Internship Intelligence<\/title>/i);
-  assert.match(html, /See the signal/);
-  assert.match(html, /Roles worth your attention/);
-  assert.match(html, /official sources only/);
+  assert.match(html, />scouter</i);
+  assert.match(html, /Relevant roles/);
+  assert.match(html, /Live source ingestion is the next build phase/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
@@ -38,8 +38,9 @@ test("keeps the product metadata and private-doc policy explicit", async () => {
   ]);
 
   assert.match(layout, /Scouter — Internship Intelligence/);
+  assert.match(layout, /Manrope/);
+  assert.match(layout, /Space_Mono/);
   assert.match(layout, /metadataBase/);
-  assert.match(layout, /\/og\.png/);
   assert.match(page, /ScouterDashboard/);
   assert.match(gitignore, /\*\.md/);
   assert.match(gitignore, /!README\.md/);
