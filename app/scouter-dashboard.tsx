@@ -1,6 +1,5 @@
 "use client";
 
-import { ExternalLink, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
 type View = "today" | "companies" | "calendar" | "missing";
@@ -130,7 +129,6 @@ export function ScouterDashboard() {
           </nav>
           {(view === "today" || view === "companies") && (
             <label className="global-search">
-              <Search size={15} aria-hidden="true" />
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
@@ -229,7 +227,7 @@ function TodayView({ roles: visibleRoles, highPriorityOnly, setHighPriorityOnly 
                   {role.score && <small>{role.score}</small>}
                 </div>
                 <a href={role.url} target="_blank" rel="noreferrer" aria-label={`Open ${role.company} careers page`}>
-                  apply <ExternalLink size={13} />
+                  apply <span aria-hidden="true">↗</span>
                 </a>
               </article>
             )) : (
@@ -282,7 +280,7 @@ function CompaniesView({ companies: visibleCompanies }: { companies: typeof comp
               <span className="mono-data">{company.ats}</span>
               <span>{company.focus}</span>
               <a href={company.url} target="_blank" rel="noreferrer" aria-label={`Open ${company.name} careers source`}>
-                source <ExternalLink size={13} />
+                source <span aria-hidden="true">↗</span>
               </a>
             </div>
           ))}
