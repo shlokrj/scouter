@@ -73,7 +73,7 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(dashboard, /last refresh/);
   assert.match(auth, /SCOUTER_OWNER_PASSWORD/);
   assert.match(auth, /crypto\.subtle/);
-  assert.doesNotMatch(auth, /Demo123/);
+  assert.doesNotMatch(auth, new RegExp("Demo" + "123"));
   assert.match(loginRoute, /httpOnly: true/);
   assert.match(icon, /<text[^>]*>s<\/text>/);
   assert.match(icon, /#ff7043/);
