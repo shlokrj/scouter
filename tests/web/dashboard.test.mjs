@@ -33,8 +33,8 @@ test("server-renders the Scouter dashboard", async () => {
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
-test("keeps the product metadata and private-doc policy explicit", async () => {
-  const [layout, page, dashboard, rolesRoute, icon, gitignore, license, readme, packageJson] = await Promise.all([
+test("keeps the product metadata and deployment setup explicit", async () => {
+  const [layout, page, dashboard, rolesRoute, icon, gitignore, license, readme, packageJson, vercelConfig] = await Promise.all([
     readFile(new URL("../../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/components/scouter-dashboard.tsx", import.meta.url), "utf8"),
@@ -44,6 +44,7 @@ test("keeps the product metadata and private-doc policy explicit", async () => {
     readFile(new URL("../../LICENSE", import.meta.url), "utf8"),
     readFile(new URL("../../README.md", import.meta.url), "utf8"),
     readFile(new URL("../../package.json", import.meta.url), "utf8"),
+    readFile(new URL("../../vercel.json", import.meta.url), "utf8"),
   ]);
 
   assert.match(layout, /title: "scouter"/);
@@ -69,5 +70,9 @@ test("keeps the product metadata and private-doc policy explicit", async () => {
   assert.match(license, /MIT License/);
   assert.match(readme, /\[MIT License\]\(\.\/LICENSE\)/);
   assert.match(packageJson, /"name": "scouter"/);
+  assert.match(packageJson, /"build": "next build"/);
+  assert.match(packageJson, /"build:cloudflare": "WRANGLER_LOG_PATH=.*vinext build"/);
+  assert.match(vercelConfig, /"framework": "nextjs"/);
+  assert.match(vercelConfig, /"outputDirectory": "\.next"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 });
