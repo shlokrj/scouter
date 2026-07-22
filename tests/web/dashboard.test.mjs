@@ -69,6 +69,10 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(rolesRoute, /explicitlySummer2027/);
   assert.match(rolesRoute, /isSummer2027Confirmed/);
   assert.match(rolesRoute, /summer2027Confirmed/);
+  assert.match(rolesRoute, /companyKey/);
+  assert.match(rolesRoute, /roleTokens/);
+  assert.match(rolesRoute, /isSameRole/);
+  assert.match(rolesRoute, /keepBestOpening/);
   assert.match(rolesRoute, /companyPriority/);
   assert.match(dashboard, /type="range"/);
   assert.match(dashboard, /watchlist/);

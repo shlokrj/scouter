@@ -226,6 +226,33 @@ function normalize(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+function companyKey(value: string) {
+  return normalize(value.replace(/\b(?:incorporated|inc|llc|ltd|limited|corp|corporation|company|co)\b/gi, ""));
+}
+
+function roleTokens(position: string) {
+  const role = decodeHtml(position)
+    .toLowerCase()
+    .replace(/\bswe\b/g, "software engineer")
+    .replace(/\bsoftware\s+(?:developer|development|engineering|engineer)\b/g, "software engineer")
+    .replace(/\b(?:developer|development|engineering)\b/g, "engineer")
+    .replace(/[–—/,&()[\]-]/g, " ")
+    .replace(/\b(?:internships?|intern|summer|fall|winter|spring|20\d{2}|undergrad(?:uate)?|bachelor'?s?|bsc|b\s*\.?\s*s\.?)\b/g, " ");
+
+  return [...new Set(role.match(/[a-z0-9]+/g) ?? [])].sort();
+}
+
+function isSameRole(left: string, right: string) {
+  const leftTokens = roleTokens(left);
+  const rightTokens = roleTokens(right);
+  if (!leftTokens.length || !rightTokens.length) return normalize(left) === normalize(right);
+  if (leftTokens.join(":") === rightTokens.join(":")) return true;
+
+  const rightSet = new Set(rightTokens);
+  const common = leftTokens.filter((token) => rightSet.has(token)).length;
+  return common >= 2 && common / Math.max(leftTokens.length, rightTokens.length) >= 0.8;
+}
+
 function canonicalUrl(value: string) {
   try {
     const url = new URL(value);
@@ -235,17 +262,41 @@ function canonicalUrl(value: string) {
   }
 }
 
+function openingQuality(opening: Opening) {
+  const undergraduateDetail = /\b(?:undergrad(?:uate)?|bachelor'?s?|bs|bsc)\b/i.test(opening.position);
+  return (opening.summer2027Confirmed ? 100 : 0)
+    + (undergraduateDetail ? 10 : 0)
+    + (opening.postedAt ? 2 : 0)
+    + Math.min(opening.position.length, 100) / 1000;
+}
+
+function keepBestOpening(left: Opening, right: Opening) {
+  const preferred = openingQuality(right) > openingQuality(left) ? right : left;
+  const alternate = preferred === left ? right : left;
+  return {
+    ...preferred,
+    postedAt: preferred.postedAt ?? alternate.postedAt,
+    summer2027Confirmed: left.summer2027Confirmed || right.summer2027Confirmed,
+  };
+}
+
 function dedupe(openings: Opening[]) {
-  const urls = new Set<string>();
-  const identities = new Set<string>();
-  return openings.filter((opening) => {
-    const url = canonicalUrl(opening.applyUrl);
-    const identity = `${normalize(opening.company)}:${normalize(opening.position)}`;
-    if (urls.has(url) || identities.has(identity)) return false;
-    urls.add(url);
-    identities.add(identity);
-    return true;
-  });
+  const unique: Opening[] = [];
+
+  for (const opening of openings) {
+    const duplicateIndex = unique.findIndex((existing) =>
+      canonicalUrl(existing.applyUrl) === canonicalUrl(opening.applyUrl)
+      || (companyKey(existing.company) === companyKey(opening.company) && isSameRole(existing.position, opening.position)),
+    );
+
+    if (duplicateIndex === -1) {
+      unique.push(opening);
+    } else {
+      unique[duplicateIndex] = keepBestOpening(unique[duplicateIndex], opening);
+    }
+  }
+
+  return unique;
 }
 
 async function fetchFeed(url: string) {
