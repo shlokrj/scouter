@@ -1,129 +1,148 @@
-type LiveRole = {
+type Opening = {
   id: string;
   company: string;
-  title: string;
-  location: string;
-  url: string;
-  provider: "Greenhouse" | "Ashby" | "Custom";
-  firstSeen: string | null;
-  sourceUpdatedAt: string | null;
+  position: string;
+  postedAt: string | null;
+  applyUrl: string;
 };
 
-type GreenhouseJob = {
-  id: number;
-  title: string;
-  absolute_url: string;
-  location?: { name?: string };
-  updated_at?: string;
+const feeds = {
+  sndsh404: "https://raw.githubusercontent.com/sndsh404/summer-2027-internships/main/README.md",
+  speedyapply: "https://raw.githubusercontent.com/speedyapply/2027-SWE-College-Jobs/main/README.md",
 };
 
-const knownFirstSeen: Record<string, string> = {
-  "Anduril:5148079007": "2026-06-24",
-  "Aquatic Capital Management:8489233002": "2026-05-22",
-  "Axon:7800617003": "2026-07-21",
-  "Pylon:fcea8b52-81f1-4b0c-b575-d7b180faec4d": "2026-07-10",
-  "Epic:software-developer-intern-2027": "2026-05-08",
-};
-
-function relevant(title: string) {
-  const value = title.toLowerCase();
-  return value.includes("intern") && /software|data|machine learning|quantitative|bci|implant|internal apps/.test(value);
+function decodeHtml(value: string) {
+  const named: Record<string, string> = {
+    "&amp;": "&",
+    "&quot;": '"',
+    "&#39;": "'",
+    "&apos;": "'",
+    "&lt;": "<",
+    "&gt;": ">",
+    "&nbsp;": " ",
+  };
+  return value
+    .replace(/&(amp|quot|#39|apos|lt|gt|nbsp);/g, (entity) => named[entity] ?? entity)
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([\da-f]+);/gi, (_, code: string) => String.fromCodePoint(Number.parseInt(code, 16)));
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
+function cleanText(value: string) {
+  return decodeHtml(value)
+    .replace(/<[^>]+>/g, "")
+    .replace(/\*\*|~~/g, "")
+    .replace(/[🛂🔒]/gu, "")
+    .replace(/\p{Regional_Indicator}{2}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function rowCells(line: string) {
+  return line.trim().split("|").slice(1, -1).map((cell) => cell.trim());
+}
+
+function inScope(position: string) {
+  const value = position.toLowerCase();
+  return !value.includes("2026") || value.includes("2027");
+}
+
+function parseSndsh404(markdown: string): Opening[] {
+  return markdown.split("\n").flatMap((line) => {
+    if (!line.startsWith("|") || line.includes("| ---") || line.includes("~~")) return [];
+    const cells = rowCells(line);
+    if (cells.length !== 5 || cells[0] === "Company") return [];
+    const applyUrl = cells[3].match(/\[[^\]]+\]\((https?:\/\/[^)]+)\)/)?.[1];
+    if (!applyUrl) return [];
+
+    const company = cleanText(cells[0]);
+    const position = cleanText(cells[1]);
+    if (!company || !position || !inScope(position)) return [];
+    const postedAt = /^\d{4}-\d{2}-\d{2}$/.test(cells[4]) ? cells[4] : null;
+
+    return [{ id: applyUrl, company, position, postedAt, applyUrl: decodeHtml(applyUrl) }];
+  });
+}
+
+function dateFromAge(age: string) {
+  const days = Number(age.match(/^(\d+)d$/)?.[1]);
+  if (!Number.isFinite(days)) return null;
+  const date = new Date();
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCDate(date.getUTCDate() - days);
+  return date.toISOString().slice(0, 10);
+}
+
+function parseSpeedyapply(markdown: string): Opening[] {
+  return markdown.split("\n").flatMap((line) => {
+    if (!line.startsWith("|") || !line.includes('alt="Apply"')) return [];
+    const cells = rowCells(line);
+    const company = cleanText(cells[0] ?? "");
+    const position = cleanText(cells[1] ?? "");
+    const applyCell = cells.find((cell) => cell.includes('alt="Apply"')) ?? "";
+    const applyUrl = applyCell.match(/<a href="(https?:\/\/[^\"]+)"/i)?.[1];
+    const postedAt = dateFromAge(cells.at(-1) ?? "");
+    if (!company || !position || !applyUrl || !inScope(position)) return [];
+
+    return [{ id: applyUrl, company, position, postedAt, applyUrl: decodeHtml(applyUrl) }];
+  });
+}
+
+function normalize(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function canonicalUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return `${url.hostname.replace(/^www\./, "")}${url.pathname.replace(/\/$/, "")}`.toLowerCase();
+  } catch {
+    return value.toLowerCase();
+  }
+}
+
+function dedupe(openings: Opening[]) {
+  const urls = new Set<string>();
+  const identities = new Set<string>();
+  return openings.filter((opening) => {
+    const url = canonicalUrl(opening.applyUrl);
+    const identity = `${normalize(opening.company)}:${normalize(opening.position)}`;
+    if (urls.has(url) || identities.has(identity)) return false;
+    urls.add(url);
+    identities.add(identity);
+    return true;
+  });
+}
+
+async function fetchFeed(url: string) {
   const response = await fetch(url, {
-    headers: { accept: "application/json", "user-agent": "Scouter/0.1 (+internship discovery)" },
+    headers: {
+      accept: "text/plain",
+      "user-agent": "Scouter/0.2 (+internship discovery)",
+    },
     signal: AbortSignal.timeout(12000),
   });
-  if (!response.ok) throw new Error(`source returned ${response.status}`);
-  return response.json() as Promise<T>;
-}
-
-function normalizeGreenhouse(company: string, jobs: GreenhouseJob[]): LiveRole[] {
-  return jobs.filter((job) => relevant(job.title)).map((job) => {
-    const id = `${company}:${job.id}`;
-    return {
-      id,
-      company,
-      title: job.title.trim(),
-      location: job.location?.name?.trim() || "Location listed on source",
-      url: job.absolute_url,
-      provider: "Greenhouse" as const,
-      firstSeen: knownFirstSeen[id] ?? null,
-      sourceUpdatedAt: job.updated_at ?? null,
-    };
-  });
-}
-
-async function greenhouseBoard(company: string, board: string) {
-  const data = await fetchJson<{ jobs: GreenhouseJob[] }>(`https://boards-api.greenhouse.io/v1/boards/${board}/jobs`);
-  return normalizeGreenhouse(company, data.jobs);
-}
-
-async function greenhouseJob(company: string, board: string, jobId: string) {
-  const job = await fetchJson<GreenhouseJob>(`https://boards-api.greenhouse.io/v1/boards/${board}/jobs/${jobId}`);
-  return normalizeGreenhouse(company, [job]);
-}
-
-async function ashbyPylon(): Promise<LiveRole[]> {
-  const data = await fetchJson<{ jobs: Array<{ id: string; title: string; location?: string; jobUrl: string; publishedAt?: string; isListed?: boolean }> }>(
-    "https://api.ashbyhq.com/posting-api/job-board/pylon-labs",
-  );
-  return data.jobs
-    .filter((job) => job.isListed !== false && relevant(job.title))
-    .map((job) => {
-      const id = `Pylon:${job.id}`;
-      return {
-        id,
-        company: "Pylon",
-        title: job.title.trim(),
-        location: job.location?.trim() || "San Francisco",
-        url: job.jobUrl,
-        provider: "Ashby" as const,
-        firstSeen: knownFirstSeen[id] ?? job.publishedAt?.slice(0, 10) ?? null,
-        sourceUpdatedAt: job.publishedAt ?? null,
-      };
-    });
-}
-
-async function epic(): Promise<LiveRole[]> {
-  const url = "https://careers.epic.com/jobs/?educationTypeIds=&positionTypeIds=&search=intern";
-  const response = await fetch(url, { signal: AbortSignal.timeout(12000) });
-  if (!response.ok) throw new Error(`source returned ${response.status}`);
-  const page = await response.text();
-  const title = "Software Developer Intern - Summer 2027";
-  if (!page.includes(title)) return [];
-  const id = "Epic:software-developer-intern-2027";
-  return [{
-    id,
-    company: "Epic",
-    title,
-    location: "Madison, WI",
-    url,
-    provider: "Custom",
-    firstSeen: knownFirstSeen[id],
-    sourceUpdatedAt: null,
-  }];
+  if (!response.ok) throw new Error(`feed returned ${response.status}`);
+  return response.text();
 }
 
 export async function GET() {
-  const sources = [
-    () => greenhouseJob("Anduril", "andurilindustries", "5148079007"),
-    () => greenhouseBoard("Aquatic Capital Management", "aquaticcapitalmanagement"),
-    () => greenhouseBoard("Neuralink", "neuralink"),
-    () => greenhouseJob("Axon", "axontalentcommunity", "7800617003"),
-    ashbyPylon,
-    epic,
-  ];
-  const settled = await Promise.allSettled(sources.map((source) => source()));
-  const roles = settled
-    .flatMap((result) => result.status === "fulfilled" ? result.value : [])
-    .sort((a, b) => (b.firstSeen ?? "").localeCompare(a.firstSeen ?? "") || a.company.localeCompare(b.company));
+  const settled = await Promise.allSettled([
+    fetchFeed(feeds.sndsh404),
+    fetchFeed(feeds.speedyapply),
+  ]);
+
+  const sndshOpenings = settled[0].status === "fulfilled" ? parseSndsh404(settled[0].value) : [];
+  const speedyOpenings = settled[1].status === "fulfilled" ? parseSpeedyapply(settled[1].value) : [];
+  const openings = dedupe([...sndshOpenings, ...speedyOpenings]).sort((a, b) =>
+    (b.postedAt ?? "").localeCompare(a.postedAt ?? "")
+      || a.company.localeCompare(b.company)
+      || a.position.localeCompare(b.position),
+  );
 
   return Response.json({
-    roles,
+    openings,
     checkedAt: new Date().toISOString(),
     sourcesChecked: settled.filter((result) => result.status === "fulfilled").length,
-    sourceCount: sources.length,
+    sourceCount: settled.length,
   }, { headers: { "cache-control": "no-store" } });
 }
