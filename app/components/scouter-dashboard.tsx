@@ -14,6 +14,7 @@ type Opening = {
   postedAt: string | null;
   applyUrl: string;
   priority: CompanyPriority;
+  summer2027Confirmed: boolean;
 };
 
 type OpeningsPayload = {
@@ -244,8 +245,11 @@ function OpeningsFeed({ openings, payload, refreshing, error, filtered }: {
           <span>company</span><span>position</span><span>date posted</span><span>application</span>
         </div>
         {openings.map((opening, index) => (
-          <article className="opening-row row-enter" style={{ animationDelay: `${Math.min(index, 14) * 18}ms` }} key={opening.id}>
-            <strong data-label="company">{opening.company}</strong>
+          <article className={`opening-row row-enter ${opening.summer2027Confirmed ? "summer-confirmed" : ""}`} style={{ animationDelay: `${Math.min(index, 14) * 18}ms` }} key={opening.id}>
+            <strong data-label="company">
+              {opening.company}
+              {opening.summer2027Confirmed && <span className="confirmed-mark" title="The source explicitly identifies this opening as Summer 2027">confirmed 2027</span>}
+            </strong>
             <h3 data-label="position">{opening.position}</h3>
             <time className="mono-data" data-label="date posted" dateTime={opening.postedAt ?? undefined}>{formatDate(opening.postedAt)}</time>
             <a href={opening.applyUrl} target="_blank" rel="noreferrer" aria-label={`Apply to ${opening.position} at ${opening.company}`}>

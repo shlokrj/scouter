@@ -10,6 +10,7 @@ type Opening = {
   postedAt: string | null;
   applyUrl: string;
   priority: CompanyPriority;
+  summer2027Confirmed: boolean;
 };
 
 const feeds = {
@@ -90,6 +91,11 @@ function inScope(position: string) {
   return !graduateOnlySignal || undergraduateSignal;
 }
 
+function isSummer2027Confirmed(position: string, applyUrl: string) {
+  const sourceSignal = `${position} ${decodeHtml(applyUrl)}`;
+  return /\b(?:summer\s*[-–]?\s*2027|2027\s+summer)\b/i.test(sourceSignal);
+}
+
 function parseSndsh404(markdown: string): Opening[] {
   return markdown.split("\n").flatMap((line) => {
     if (!line.startsWith("|") || line.includes("| ---") || line.includes("~~")) return [];
@@ -103,7 +109,15 @@ function parseSndsh404(markdown: string): Opening[] {
     if (!company || !position || !inScope(position)) return [];
     const postedAt = /^\d{4}-\d{2}-\d{2}$/.test(cells[4]) ? cells[4] : null;
 
-    return [{ id: applyUrl, company, position, postedAt, applyUrl: decodeHtml(applyUrl), priority: companyPriority(company) }];
+    return [{
+      id: applyUrl,
+      company,
+      position,
+      postedAt,
+      applyUrl: decodeHtml(applyUrl),
+      priority: companyPriority(company),
+      summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
+    }];
   });
 }
 
@@ -143,7 +157,15 @@ function parseSpeedyapply(markdown: string): Opening[] {
     const postedAt = dateFromAge(cells.at(-1) ?? "");
     if (!company || !position || !applyUrl || !inScope(position)) return [];
 
-    return [{ id: applyUrl, company, position, postedAt, applyUrl: decodeHtml(applyUrl), priority: companyPriority(company) }];
+    return [{
+      id: applyUrl,
+      company,
+      position,
+      postedAt,
+      applyUrl: decodeHtml(applyUrl),
+      priority: companyPriority(company),
+      summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
+    }];
   });
 }
 
@@ -164,7 +186,15 @@ function parseVanshb03(markdown: string): Opening[] {
     const postedAt = dateFromMonthDay(cleanText(cells[4]));
     if (!company || !position || !applyUrl || !inScope(position)) return [];
 
-    return [{ id: applyUrl, company, position, postedAt, applyUrl: decodeHtml(applyUrl), priority: companyPriority(company) }];
+    return [{
+      id: applyUrl,
+      company,
+      position,
+      postedAt,
+      applyUrl: decodeHtml(applyUrl),
+      priority: companyPriority(company),
+      summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
+    }];
   });
 }
 
@@ -180,7 +210,15 @@ function parseChieler(markdown: string): Opening[] {
     const applyUrl = linkFromCell(cells[4]);
     if (!company || !position || !postedAt || !applyUrl || !inScope(position)) return [];
 
-    return [{ id: applyUrl, company, position, postedAt, applyUrl: decodeHtml(applyUrl), priority: companyPriority(company) }];
+    return [{
+      id: applyUrl,
+      company,
+      position,
+      postedAt,
+      applyUrl: decodeHtml(applyUrl),
+      priority: companyPriority(company),
+      summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
+    }];
   });
 }
 
