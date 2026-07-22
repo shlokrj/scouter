@@ -44,5 +44,6 @@ next-env.d.ts
 # private planning and ai collaboration files
 *.md
 !README.md
+/slop.md
 /.ai/
 /.codex/
