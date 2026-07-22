@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 async function render() {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  const workerUrl = new URL("../../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
 
@@ -35,14 +35,14 @@ test("server-renders the Scouter dashboard", async () => {
 
 test("keeps the product metadata and private-doc policy explicit", async () => {
   const [layout, page, dashboard, rolesRoute, icon, gitignore, license, packageJson] = await Promise.all([
-    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/scouter-dashboard.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/api/roles/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/icon.svg", import.meta.url), "utf8"),
-    readFile(new URL("../.gitignore", import.meta.url), "utf8"),
-    readFile(new URL("../LICENSE", import.meta.url), "utf8"),
-    readFile(new URL("../package.json", import.meta.url), "utf8"),
+    readFile(new URL("../../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../../app/components/scouter-dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../../app/api/roles/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../../app/icon.svg", import.meta.url), "utf8"),
+    readFile(new URL("../../.gitignore", import.meta.url), "utf8"),
+    readFile(new URL("../../LICENSE", import.meta.url), "utf8"),
+    readFile(new URL("../../package.json", import.meta.url), "utf8"),
   ]);
 
   assert.match(layout, /title: "scouter"/);

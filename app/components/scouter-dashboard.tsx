@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { watchlist } from "./data/watchlist";
+import { watchlist } from "../data/watchlist";
 
 type View = "openings" | "companies";
 type CompanyPriority = "all" | "top" | "faang";
