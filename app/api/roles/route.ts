@@ -1,9 +1,14 @@
+import { watchlist } from "../../data/watchlist";
+
+type CompanyPriority = "all" | "top" | "faang";
+
 type Opening = {
   id: string;
   company: string;
   position: string;
   postedAt: string | null;
   applyUrl: string;
+  priority: CompanyPriority;
 };
 
 const feeds = {
@@ -41,9 +46,40 @@ function rowCells(line: string) {
   return line.trim().split("|").slice(1, -1).map((cell) => cell.trim());
 }
 
+const faangPlus = new Set([
+  "alphabet", "amazon", "apple", "google", "meta", "microsoft", "netflix", "nvidia",
+]);
+
+const topCompanies = new Set([
+  "adobe", "airbnb", "anduril", "anthropic", "bloomberg", "bytedance", "chicagotradingcompany",
+  "citadel", "citadelsecurities", "cloudflare", "coinbase", "databricks", "datadog", "discord",
+  "doordash", "dropbox", "figma", "five rings", "hudsonrivertrading", "imc", "janestreet",
+  "jumptrading", "linkedin", "lyft", "mongodb", "notion", "openai", "optiver", "palantir",
+  "pinterest", "plaid", "ramp", "reddit", "rippling", "roblox", "salesforce", "samsara",
+  "snowflake", "spacex", "stripe", "tesla", "tiktok", "twosigma", "uber", "waymo", "xai",
+].map(normalize));
+
+const watchlistRanks = new Map(watchlist.map((company) => [normalize(company.name), company.rank]));
+
+function companyPriority(company: string): CompanyPriority {
+  const name = normalize(company);
+  if (faangPlus.has(name)) return "faang";
+  const rank = watchlistRanks.get(name);
+  if (topCompanies.has(name) || (rank !== null && rank !== undefined && rank <= 100)) return "top";
+  return "all";
+}
+
 function inScope(position: string) {
   const value = position.toLowerCase();
-  return !value.includes("2026") || value.includes("2027");
+  const explicitlySummer2027 = /summer\s+2027/.test(value);
+  const otherSeason = /\b(fall|winter|spring)\b/.test(value);
+  const mixedYear = value.includes("2026") && !explicitlySummer2027;
+  const nonSummerCoop = /\bco-?op\b/.test(value) && !explicitlySummer2027;
+  if ((otherSeason && !explicitlySummer2027) || mixedYear || nonSummerCoop) return false;
+
+  const undergraduateSignal = /\b(undergrad(?:uate)?|bachelor'?s?|bs|bsc)\b/.test(value);
+  const graduateOnlySignal = /\b(ph\.?d\.?|doctoral|doctorate|master'?s?|masters|ms|mba|graduate)\b/.test(value);
+  return !graduateOnlySignal || undergraduateSignal;
 }
 
 function parseSndsh404(markdown: string): Opening[] {
@@ -59,7 +95,7 @@ function parseSndsh404(markdown: string): Opening[] {
     if (!company || !position || !inScope(position)) return [];
     const postedAt = /^\d{4}-\d{2}-\d{2}$/.test(cells[4]) ? cells[4] : null;
 
-    return [{ id: applyUrl, company, position, postedAt, applyUrl: decodeHtml(applyUrl) }];
+    return [{ id: applyUrl, company, position, postedAt, applyUrl: decodeHtml(applyUrl), priority: companyPriority(company) }];
   });
 }
 
@@ -83,7 +119,7 @@ function parseSpeedyapply(markdown: string): Opening[] {
     const postedAt = dateFromAge(cells.at(-1) ?? "");
     if (!company || !position || !applyUrl || !inScope(position)) return [];
 
-    return [{ id: applyUrl, company, position, postedAt, applyUrl: decodeHtml(applyUrl) }];
+    return [{ id: applyUrl, company, position, postedAt, applyUrl: decodeHtml(applyUrl), priority: companyPriority(company) }];
   });
 }
 
