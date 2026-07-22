@@ -46,6 +46,15 @@ function formatTime(value: string) {
   }).format(new Date(value));
 }
 
+function formatRefresh(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
 function matchesPriority(priority: CompanyPriority, level: number) {
   if (level === 2) return priority === "faang";
   if (level === 1) return priority === "top" || priority === "faang";
@@ -103,7 +112,7 @@ export function ScouterDashboard() {
     <div className="site-shell">
       <header className="site-header">
         <div className="header-inner">
-          <Link className="wordmark" href="/" aria-label="scouter home">scouter</Link>
+          <Link className="wordmark" href="/login" aria-label="scouter login">scouter</Link>
           <nav aria-label="Primary navigation">
             <button className={view === "openings" ? "active" : ""} aria-current={view === "openings" ? "page" : undefined} onClick={() => selectView("openings")}>openings</button>
             <button className={view === "companies" ? "active" : ""} aria-current={view === "companies" ? "page" : undefined} onClick={() => selectView("companies")}>companies</button>
@@ -126,10 +135,13 @@ export function ScouterDashboard() {
               </p>
             </div>
             {view === "openings" && (
-              <button className={`refresh-button ${refreshing ? "refreshing" : ""}`} onClick={() => void refresh()} disabled={refreshing}>
-                <span aria-hidden="true">↻</span>
-                {refreshing ? "refreshing" : "refresh"}
-              </button>
+              <div className="refresh-control">
+                <button className={`refresh-button ${refreshing ? "refreshing" : ""}`} onClick={() => void refresh()} disabled={refreshing}>
+                  <span aria-hidden="true">↻</span>
+                  {refreshing ? "refreshing" : "refresh"}
+                </button>
+                <time>{payload ? `last refresh ${formatRefresh(payload.checkedAt)}` : "checking sources"}</time>
+              </div>
             )}
           </div>
 
@@ -194,6 +206,10 @@ export function ScouterDashboard() {
           <a href="https://github.com/sndsh404/summer-2027-internships" target="_blank" rel="noreferrer">sndsh404</a>
           <span aria-hidden="true"> + </span>
           <a href="https://github.com/speedyapply/2027-SWE-College-Jobs" target="_blank" rel="noreferrer">speedyapply</a>
+          <span aria-hidden="true"> + </span>
+          <a href="https://github.com/vanshb03/Summer2027-Internships" target="_blank" rel="noreferrer">vanshb03</a>
+          <span aria-hidden="true"> + </span>
+          <a href="https://github.com/Chieler/Summer-2027-SWE-Internships" target="_blank" rel="noreferrer">chieler</a>
         </span>
       </footer>
     </div>

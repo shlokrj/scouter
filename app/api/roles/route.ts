@@ -1,4 +1,5 @@
 import { watchlist } from "../../data/watchlist";
+import { hasOwnerSession } from "../../lib/owner-auth";
 
 type CompanyPriority = "all" | "top" | "faang";
 
@@ -14,6 +15,8 @@ type Opening = {
 const feeds = {
   sndsh404: "https://raw.githubusercontent.com/sndsh404/summer-2027-internships/main/README.md",
   speedyapply: "https://raw.githubusercontent.com/speedyapply/2027-SWE-College-Jobs/main/README.md",
+  vanshb03: "https://raw.githubusercontent.com/vanshb03/Summer2027-Internships/dev/README.md",
+  chieler: "https://raw.githubusercontent.com/Chieler/Summer-2027-SWE-Internships/main/README.md",
 };
 
 function decodeHtml(value: string) {
@@ -44,6 +47,11 @@ function cleanText(value: string) {
 
 function rowCells(line: string) {
   return line.trim().split("|").slice(1, -1).map((cell) => cell.trim());
+}
+
+function linkFromCell(value: string) {
+  return value.match(/<a\s+href="(https?:\/\/[^\"]+)"/i)?.[1]
+    ?? value.match(/\[[^\]]+\]\((https?:\/\/[^)]+)\)/)?.[1];
 }
 
 const faangPlus = new Set([
@@ -108,6 +116,22 @@ function dateFromAge(age: string) {
   return date.toISOString().slice(0, 10);
 }
 
+function dateFromMonthDay(value: string) {
+  const match = value.trim().match(/^([A-Za-z]{3})\s+(\d{1,2})$/);
+  if (!match) return null;
+
+  const month = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].indexOf(match[1].toLowerCase());
+  if (month < 0) return null;
+
+  const now = new Date();
+  let year = now.getUTCFullYear();
+  const date = new Date(Date.UTC(year, month, Number(match[2])));
+  if (date.getTime() > now.getTime() + 36 * 60 * 60 * 1000) {
+    year -= 1;
+  }
+  return new Date(Date.UTC(year, month, Number(match[2]))).toISOString().slice(0, 10);
+}
+
 function parseSpeedyapply(markdown: string): Opening[] {
   return markdown.split("\n").flatMap((line) => {
     if (!line.startsWith("|") || !line.includes('alt="Apply"')) return [];
@@ -118,6 +142,43 @@ function parseSpeedyapply(markdown: string): Opening[] {
     const applyUrl = applyCell.match(/<a href="(https?:\/\/[^\"]+)"/i)?.[1];
     const postedAt = dateFromAge(cells.at(-1) ?? "");
     if (!company || !position || !applyUrl || !inScope(position)) return [];
+
+    return [{ id: applyUrl, company, position, postedAt, applyUrl: decodeHtml(applyUrl), priority: companyPriority(company) }];
+  });
+}
+
+function parseVanshb03(markdown: string): Opening[] {
+  let previousCompany = "";
+
+  return markdown.split("\n").flatMap((line) => {
+    if (!line.startsWith("|") || line.includes("| ---") || line.includes("~~")) return [];
+    const cells = rowCells(line);
+    if (cells.length !== 5 || cells[0] === "Company") return [];
+
+    const listedCompany = cleanText(cells[0]);
+    const company = listedCompany === "↳" ? previousCompany : listedCompany;
+    if (listedCompany && listedCompany !== "↳") previousCompany = listedCompany;
+
+    const position = cleanText(cells[1]);
+    const applyUrl = linkFromCell(cells[3]);
+    const postedAt = dateFromMonthDay(cleanText(cells[4]));
+    if (!company || !position || !applyUrl || !inScope(position)) return [];
+
+    return [{ id: applyUrl, company, position, postedAt, applyUrl: decodeHtml(applyUrl), priority: companyPriority(company) }];
+  });
+}
+
+function parseChieler(markdown: string): Opening[] {
+  return markdown.split("\n").flatMap((line) => {
+    if (!line.startsWith("|") || line.includes("|---")) return [];
+    const cells = rowCells(line);
+    if (cells.length !== 5 || cells[0] === "Company") return [];
+
+    const company = cleanText(cells[0]);
+    const position = cleanText(cells[1]);
+    const postedAt = /^\d{4}-\d{2}-\d{2}$/.test(cells[2]) ? cells[2] : null;
+    const applyUrl = linkFromCell(cells[4]);
+    if (!company || !position || !postedAt || !applyUrl || !inScope(position)) return [];
 
     return [{ id: applyUrl, company, position, postedAt, applyUrl: decodeHtml(applyUrl), priority: companyPriority(company) }];
   });
@@ -162,14 +223,22 @@ async function fetchFeed(url: string) {
 }
 
 export async function GET() {
+  if (!(await hasOwnerSession())) {
+    return Response.json({ message: "Owner access required." }, { status: 401 });
+  }
+
   const settled = await Promise.allSettled([
     fetchFeed(feeds.sndsh404),
     fetchFeed(feeds.speedyapply),
+    fetchFeed(feeds.vanshb03),
+    fetchFeed(feeds.chieler),
   ]);
 
   const sndshOpenings = settled[0].status === "fulfilled" ? parseSndsh404(settled[0].value) : [];
   const speedyOpenings = settled[1].status === "fulfilled" ? parseSpeedyapply(settled[1].value) : [];
-  const openings = dedupe([...sndshOpenings, ...speedyOpenings]).sort((a, b) =>
+  const vanshOpenings = settled[2].status === "fulfilled" ? parseVanshb03(settled[2].value) : [];
+  const chielerOpenings = settled[3].status === "fulfilled" ? parseChieler(settled[3].value) : [];
+  const openings = dedupe([...sndshOpenings, ...speedyOpenings, ...vanshOpenings, ...chielerOpenings]).sort((a, b) =>
     (b.postedAt ?? "").localeCompare(a.postedAt ?? "")
       || a.company.localeCompare(b.company)
       || a.position.localeCompare(b.position),
