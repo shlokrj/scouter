@@ -22,17 +22,17 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase: new URL(`${protocol}://${host}`),
     title: "scouter",
-    description: "A continuously updated list of 2027 internship openings and direct application links.",
+    description: "Undergraduate Summer 2027 internships with posting dates and direct application links.",
     openGraph: {
       title: "scouter",
-      description: "A continuously updated list of 2027 internship openings and direct application links.",
-      images: [{ url: "/og.png", width: 1774, height: 887, alt: "scouter internship openings" }],
+      description: "Undergraduate Summer 2027 internships with posting dates and direct application links.",
+      images: [{ url: "/og-undergrad.png", width: 1659, height: 948, alt: "scouter undergraduate internship openings" }],
     },
     twitter: {
       card: "summary_large_image",
       title: "scouter",
-      description: "A continuously updated list of 2027 internship openings and direct application links.",
-      images: ["/og.png"],
+      description: "Undergraduate Summer 2027 internships with posting dates and direct application links.",
+      images: ["/og-undergrad.png"],
     },
   };
 }
