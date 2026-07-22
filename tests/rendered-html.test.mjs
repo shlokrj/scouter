@@ -24,7 +24,10 @@ test("server-renders the Scouter dashboard", async () => {
   assert.match(html, /aria-label="scouter home"/i);
   assert.match(html, />scouter<\/a>/i);
   assert.match(html, /Internship openings/);
-  assert.match(html, /Loading every opening/);
+  assert.match(html, /undergraduate · united states · summer 2027/i);
+  assert.match(html, /Loading undergraduate Summer 2027 openings/);
+  assert.match(html, /aria-label="Company priority"/);
+  assert.match(html, />companies<\/button>/);
   assert.match(html, /date posted/);
   assert.doesNotMatch(html, /applications imported|application calendar|status-select/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
@@ -51,8 +54,14 @@ test("keeps the product metadata and private-doc policy explicit", async () => {
   assert.match(rolesRoute, /sndsh404\/summer-2027-internships/);
   assert.match(rolesRoute, /speedyapply\/2027-SWE-College-Jobs/);
   assert.match(rolesRoute, /dedupe\(\[\.\.\.sndshOpenings, \.\.\.speedyOpenings\]\)/);
+  assert.match(rolesRoute, /graduateOnlySignal/);
+  assert.match(rolesRoute, /explicitlySummer2027/);
+  assert.match(rolesRoute, /companyPriority/);
+  assert.match(dashboard, /type="range"/);
+  assert.match(dashboard, /watchlist/);
   assert.match(icon, /<text[^>]*>s<\/text>/);
   assert.match(icon, /#ff7043/);
+  assert.match(icon, /rx="14"/);
   assert.match(gitignore, /\*\.md/);
   assert.match(gitignore, /!README\.md/);
   assert.match(license, /MIT License/);
