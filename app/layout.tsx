@@ -1,16 +1,17 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Manrope, Space_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const manrope = Manrope({
+  variable: "--font-manrope",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const spaceMono = Space_Mono({
+  variable: "--font-space-mono",
   subsets: ["latin"],
+  weight: ["400", "700"],
 });
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -25,13 +26,11 @@ export async function generateMetadata(): Promise<Metadata> {
     openGraph: {
       title: "Scouter — Internship Intelligence",
       description: "See high-fit 2027 internships the moment they appear.",
-      images: [{ url: "/og.png", width: 1733, height: 907, alt: "Scouter — See the signal before the crowd." }],
     },
     twitter: {
-      card: "summary_large_image",
+      card: "summary",
       title: "Scouter — Internship Intelligence",
       description: "See high-fit 2027 internships the moment they appear.",
-      images: ["/og.png"],
     },
   };
 }
@@ -39,7 +38,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>{children}</body>
+      <body className={`${manrope.variable} ${spaceMono.variable}`}>{children}</body>
     </html>
   );
 }
