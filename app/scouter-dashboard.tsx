@@ -1,117 +1,160 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { applications, type Application, type ApplicationStatus } from "./data/applications";
+import { watchlist } from "./data/watchlist";
 
-type View = "today" | "companies" | "calendar" | "missing";
+type View = "openings" | "applications" | "companies" | "calendar";
+type CompanyFilter = "all" | "fortune" | "target";
 
-const roles = [
-  {
-    id: 1,
-    company: "Google",
-    title: "Software Engineering Intern, BS, Summer 2027",
-    location: "Multiple U.S.",
-    firstSeen: "Jul 22, 2026",
-    deadline: "Jul 24, 2026",
-    priority: "very high",
-    score: "99 fit",
-    reason: "BS eligible; Python, Java, C++, and JavaScript accepted.",
-    url: "https://www.google.com/about/careers/applications/jobs/results",
-  },
-  {
-    id: 2,
-    company: "Epic",
-    title: "Software Developer Intern — Summer 2027",
-    location: "Madison, WI",
-    firstSeen: "May 8, 2026",
-    deadline: "Not listed",
-    priority: "high",
-    score: null,
-    reason: "Strong Java and software engineering fit; close to UW–Madison.",
-    url: "https://careers.epic.com/jobs/intern",
-  },
-];
+type LiveRole = {
+  id: string;
+  company: string;
+  title: string;
+  location: string;
+  url: string;
+  provider: "Greenhouse" | "Ashby" | "Custom";
+  firstSeen: string | null;
+  sourceUpdatedAt: string | null;
+};
 
-const companies = [
-  {
-    name: "Google",
-    category: "Big Tech",
-    priority: "Very High",
-    ats: "Custom",
-    focus: "Track SWE BS internships",
-    url: "https://www.google.com/about/careers/applications/jobs/results",
-  },
-  {
-    name: "Epic",
-    category: "Healthcare Software",
-    priority: "Very High",
-    ats: "Custom",
-    focus: "Often opens early",
-    url: "https://careers.epic.com/jobs/intern",
-  },
-  {
-    name: "Ramp",
-    category: "Fintech",
-    priority: "High",
-    ats: "Ashby",
-    focus: "Startup and full-stack fit",
-    url: "https://jobs.ashbyhq.com/ramp",
-  },
-  {
-    name: "Anduril",
-    category: "Defense / Autonomy",
-    priority: "High",
-    ats: "Greenhouse",
-    focus: "Robotics and autonomy",
-    url: "https://job-boards.greenhouse.io/andurilindustries",
-  },
-];
-
-const changeExamples = [
-  { company: "Google", change: "Deadline changed", detail: "A tracked deadline was updated." },
-  { company: "Uber", change: "Role removed", detail: "Last seen July 21, 2026." },
-  { company: "Epic", change: "Cycle clarified", detail: "Summer 2027 was added to the internship page." },
-];
-
-const releaseCalendar = [
-  { month: "May", observed: ["Epic"], expected: [] },
-  { month: "June", observed: ["Early quant and defense firms"], expected: [] },
-  { month: "July", observed: ["Google", "Uber", "CTC", "HRT", "Palantir"], expected: [] },
-  { month: "August", observed: [], expected: ["Expected big wave"] },
-  { month: "September", observed: [], expected: ["Expected career-fair wave"] },
-];
-
-const missingCompanies = ["Microsoft", "Amazon", "Apple", "Roblox", "Bloomberg"];
+type RolesPayload = {
+  roles: LiveRole[];
+  checkedAt: string;
+  sourcesChecked: number;
+  sourceCount: number;
+};
 
 const navigation: Array<{ id: View; label: string }> = [
-  { id: "today", label: "today" },
+  { id: "openings", label: "openings" },
+  { id: "applications", label: "applications" },
   { id: "companies", label: "companies" },
-  { id: "calendar", label: "release calendar" },
-  { id: "missing", label: "not released" },
+  { id: "calendar", label: "calendar" },
 ];
 
+const statusOptions: ApplicationStatus[] = ["Submitted", "In Progress", "Rejected", "Withdrawn"];
+
+function formatDate(value: string | null) {
+  if (!value) return "new";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${value.slice(0, 10)}T00:00:00Z`));
+}
+
+function formatTime(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function normalizeCompany(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 export function ScouterDashboard() {
-  const [view, setView] = useState<View>("today");
+  const [view, setView] = useState<View>("openings");
   const [query, setQuery] = useState("");
-  const [highPriorityOnly, setHighPriorityOnly] = useState(false);
+  const [rolesPayload, setRolesPayload] = useState<RolesPayload | null>(null);
+  const [rolesError, setRolesError] = useState(false);
+  const [refreshing, setRefreshing] = useState(true);
+  const [companyFilter, setCompanyFilter] = useState<CompanyFilter>("all");
+  const [companyLimit, setCompanyLimit] = useState(100);
+  const [applicationStatuses, setApplicationStatuses] = useState<Record<string, ApplicationStatus>>(
+    () => Object.fromEntries(applications.map((application) => [application.id, application.status])),
+  );
+
+  const refreshRoles = useCallback(async () => {
+    setRefreshing(true);
+    setRolesError(false);
+    try {
+      const response = await fetch("/api/roles", { cache: "no-store" });
+      if (!response.ok) throw new Error("role refresh failed");
+      setRolesPayload(await response.json() as RolesPayload);
+    } catch {
+      setRolesError(true);
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const start = window.setTimeout(() => {
+      void refreshRoles();
+      try {
+        const saved = window.localStorage.getItem("scouter:application-statuses");
+        if (saved) setApplicationStatuses((current) => ({ ...current, ...JSON.parse(saved) }));
+      } catch {
+        // Device storage is optional; the imported tracker remains the fallback.
+      }
+    }, 0);
+    return () => window.clearTimeout(start);
+  }, [refreshRoles]);
+
+  const changeStatus = (id: string, status: ApplicationStatus) => {
+    setApplicationStatuses((current) => {
+      const next = { ...current, [id]: status };
+      try {
+        window.localStorage.setItem("scouter:application-statuses", JSON.stringify(next));
+      } catch {
+        // The view still updates even when device storage is unavailable.
+      }
+      return next;
+    });
+  };
 
   const visibleRoles = useMemo(() => {
     const term = query.trim().toLowerCase();
-    return roles.filter((role) => {
-      const matches = !term || `${role.company} ${role.title} ${role.location}`.toLowerCase().includes(term);
-      return matches && (!highPriorityOnly || role.priority === "very high");
-    });
-  }, [query, highPriorityOnly]);
+    return (rolesPayload?.roles ?? []).filter((role) =>
+      !term || `${role.company} ${role.title} ${role.location} ${role.provider}`.toLowerCase().includes(term),
+    );
+  }, [query, rolesPayload]);
 
-  const visibleCompanies = useMemo(() => {
+  const visibleApplications = useMemo(() => {
     const term = query.trim().toLowerCase();
-    return companies.filter((company) => !term || `${company.name} ${company.category} ${company.ats}`.toLowerCase().includes(term));
-  }, [query]);
+    return applications.filter((application) =>
+      !term || `${application.company} ${application.title} ${application.note ?? ""} ${applicationStatuses[application.id]}`.toLowerCase().includes(term),
+    );
+  }, [applicationStatuses, query]);
+
+  const matchingCompanies = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    return watchlist.filter((company) => {
+      const matchesQuery = !term || `${company.name} ${company.category} ${company.cohort}`.toLowerCase().includes(term);
+      const matchesFilter = companyFilter === "all"
+        || (companyFilter === "fortune" && company.rank !== null)
+        || (companyFilter === "target" && company.cohort !== "Fortune 500");
+      return matchesQuery && matchesFilter;
+    });
+  }, [companyFilter, query]);
+
+  const appliedByCompany = useMemo(() => {
+    const map = new Map<string, Application>();
+    applications.forEach((application) => map.set(normalizeCompany(application.company), application));
+    return map;
+  }, []);
+
+  const searchable = view !== "calendar";
 
   return (
     <div className="site-shell">
       <header className="site-header">
         <div className="header-inner">
-          <button className="wordmark" onClick={() => setView("today")}>scouter</button>
+          <button
+            className="wordmark"
+            aria-label="scouter home"
+            title="scouter"
+            onClick={() => {
+              setView("openings");
+              setQuery("");
+            }}
+          >
+            s
+          </button>
           <nav aria-label="Primary navigation">
             {navigation.map((item) => (
               <button
@@ -121,19 +164,24 @@ export function ScouterDashboard() {
                 onClick={() => {
                   setView(item.id);
                   setQuery("");
+                  setCompanyLimit(100);
                 }}
               >
                 {item.label}
               </button>
             ))}
           </nav>
-          {(view === "today" || view === "companies") && (
+          {searchable && (
             <label className="global-search">
+              <span aria-hidden="true">/</span>
               <input
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={view === "today" ? "Search roles" : "Search companies"}
-                aria-label={view === "today" ? "Search roles" : "Search companies"}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setCompanyLimit(100);
+                }}
+                placeholder={`search ${view}`}
+                aria-label={`Search ${view}`}
               />
             </label>
           )}
@@ -141,27 +189,50 @@ export function ScouterDashboard() {
       </header>
 
       <main className="main-content">
-        {view === "today" && (
-          <TodayView
-            roles={visibleRoles}
-            highPriorityOnly={highPriorityOnly}
-            setHighPriorityOnly={setHighPriorityOnly}
-          />
-        )}
-        {view === "companies" && <CompaniesView companies={visibleCompanies} />}
-        {view === "calendar" && <CalendarView />}
-        {view === "missing" && <MissingView />}
+        <div className="view-enter" key={view}>
+          {view === "openings" && (
+            <OpeningsView
+              roles={visibleRoles}
+              payload={rolesPayload}
+              refreshing={refreshing}
+              error={rolesError}
+              refresh={refreshRoles}
+              appliedByCompany={appliedByCompany}
+              statuses={applicationStatuses}
+            />
+          )}
+          {view === "applications" && (
+            <ApplicationsView
+              entries={visibleApplications}
+              statuses={applicationStatuses}
+              changeStatus={changeStatus}
+            />
+          )}
+          {view === "companies" && (
+            <CompaniesView
+              companies={matchingCompanies.slice(0, companyLimit)}
+              total={matchingCompanies.length}
+              filter={companyFilter}
+              setFilter={(filter) => {
+                setCompanyFilter(filter);
+                setCompanyLimit(100);
+              }}
+              showMore={() => setCompanyLimit((current) => current + 100)}
+            />
+          )}
+          {view === "calendar" && <CalendarView />}
+        </div>
       </main>
 
       <footer className="site-footer">
-        <span>Scouter prototype</span>
-        <span>Summer 2027</span>
+        <span>{watchlist.length} companies tracked</span>
+        <span>{applications.length} applications imported</span>
       </footer>
     </div>
   );
 }
 
-function PageHeader({ title, description, aside }: { title: string; description: string; aside?: React.ReactNode }) {
+function PageHeader({ title, description, aside }: { title: string; description: string; aside?: ReactNode }) {
   return (
     <div className="page-header">
       <div>
@@ -173,159 +244,218 @@ function PageHeader({ title, description, aside }: { title: string; description:
   );
 }
 
-function TodayView({ roles: visibleRoles, highPriorityOnly, setHighPriorityOnly }: {
-  roles: typeof roles;
-  highPriorityOnly: boolean;
-  setHighPriorityOnly: (value: boolean) => void;
+function OpeningsView({ roles, payload, refreshing, error, refresh, appliedByCompany, statuses }: {
+  roles: LiveRole[];
+  payload: RolesPayload | null;
+  refreshing: boolean;
+  error: boolean;
+  refresh: () => Promise<void>;
+  appliedByCompany: Map<string, Application>;
+  statuses: Record<string, ApplicationStatus>;
 }) {
   return (
     <>
       <PageHeader
-        title="Today"
-        description="Roles and changes from the supplied product brief. Live source ingestion is the next build phase."
-        aside={<time dateTime="2026-07-22">July 22, 2026</time>}
+        title="Open internships"
+        description="Current software, data, ML, and quantitative internships found on official company sources."
+        aside={(
+          <button className={`refresh-button ${refreshing ? "refreshing" : ""}`} onClick={() => void refresh()} disabled={refreshing}>
+            <span aria-hidden="true">↻</span>
+            {refreshing ? "checking" : "refresh"}
+          </button>
+        )}
       />
 
-      <div className="content-grid">
-        <section className="primary-section" aria-labelledby="roles-heading">
-          <div className="section-header">
-            <div>
-              <h2 id="roles-heading">Relevant roles</h2>
-              <p>Sorted by priority, then first seen.</p>
-            </div>
-            <label className="text-filter">
-              <input
-                type="checkbox"
-                checked={highPriorityOnly}
-                onChange={(event) => setHighPriorityOnly(event.target.checked)}
-              />
-              very high priority only
-            </label>
+      <section className="table-section" aria-labelledby="openings-heading">
+        <div className="section-header">
+          <div>
+            <h2 id="openings-heading">Official sources</h2>
+            <p aria-live="polite">
+              {refreshing && !payload
+                ? "Checking company career pages now."
+                : error && !payload
+                  ? "Could not reach the source set. Try refresh."
+                  : `${payload?.sourcesChecked ?? 0} of ${payload?.sourceCount ?? 0} sources checked · ${payload ? `updated ${formatTime(payload.checkedAt)}` : "waiting"}`}
+            </p>
           </div>
+          <span className="section-count">{roles.length} open</span>
+        </div>
 
-          <div className="roles-list" aria-live="polite">
-            <div className="roles-head" aria-hidden="true">
-              <span>Role</span>
-              <span>Location</span>
-              <span>First seen</span>
-              <span>Deadline</span>
-              <span>Priority</span>
-              <span />
-            </div>
-            {visibleRoles.length > 0 ? visibleRoles.map((role) => (
-              <article className="role-item" key={role.id}>
-                <div className="role-title">
-                  <span>{role.company}</span>
-                  <h3>{role.title}</h3>
-                  <p>{role.reason}</p>
-                </div>
-                <div data-label="Location">{role.location}</div>
-                <div className="mono-data" data-label="First seen">{role.firstSeen}</div>
-                <div className="mono-data" data-label="Deadline">{role.deadline}</div>
-                <div data-label="Priority">
-                  <span className={`priority ${role.priority.replace(" ", "-")}`}>{role.priority}</span>
-                  {role.score && <small>{role.score}</small>}
-                </div>
-                <a href={role.url} target="_blank" rel="noreferrer" aria-label={`Open ${role.company} careers page`}>
-                  apply <span aria-hidden="true">↗</span>
-                </a>
+        <div className="role-table" aria-live="polite">
+          <div className="role-head" aria-hidden="true">
+            <span>company</span><span>role</span><span>location</span><span>first seen</span><span>source</span><span>status</span><span />
+          </div>
+          {roles.map((role, index) => {
+            const application = appliedByCompany.get(normalizeCompany(role.company));
+            return (
+              <article className="role-row row-enter" style={{ animationDelay: `${Math.min(index, 12) * 22}ms` }} key={role.id}>
+                <strong data-label="company">{role.company}</strong>
+                <h3 data-label="role">{role.title}</h3>
+                <span data-label="location">{role.location}</span>
+                <time className="mono-data" data-label="first seen" dateTime={role.firstSeen ?? undefined}>{formatDate(role.firstSeen)}</time>
+                <span className="mono-data" data-label="source">{role.provider}</span>
+                <span className={application ? `status-label ${statuses[application.id].toLowerCase().replace(" ", "-")}` : "status-label"} data-label="status">
+                  {application ? statuses[application.id].toLowerCase() : "not applied"}
+                </span>
+                <a href={role.url} target="_blank" rel="noreferrer" aria-label={`Open ${role.company} source`} title="Open official source">↗</a>
               </article>
-            )) : (
-              <p className="empty-message">No roles match this search.</p>
-            )}
-          </div>
-        </section>
-
-        <aside className="changes-section" aria-labelledby="changes-heading">
-          <div className="section-header">
-            <div>
-              <h2 id="changes-heading">Change examples</h2>
-              <p>Events Scouter is designed to retain.</p>
-            </div>
-          </div>
-          <div className="change-list">
-            {changeExamples.map((event) => (
-              <div key={`${event.company}-${event.change}`}>
-                <div><strong>{event.company}</strong><span>{event.change}</span></div>
-                <p>{event.detail}</p>
-              </div>
-            ))}
-          </div>
-        </aside>
-      </div>
+            );
+          })}
+          {!refreshing && roles.length === 0 && (
+            <p className="empty-message">No open roles match this search.</p>
+          )}
+        </div>
+      </section>
     </>
   );
 }
 
-function CompaniesView({ companies: visibleCompanies }: { companies: typeof companies }) {
+function ApplicationsView({ entries, statuses, changeStatus }: {
+  entries: Application[];
+  statuses: Record<string, ApplicationStatus>;
+  changeStatus: (id: string, status: ApplicationStatus) => void;
+}) {
+  const counts = statusOptions.map((status) => ({
+    status,
+    count: applications.filter((application) => statuses[application.id] === status).length,
+  }));
+
+  return (
+    <>
+      <PageHeader
+        title="Applications"
+        description="Imported from your tracker. Status changes are saved on this device."
+        aside={<span className="header-metric">{applications.length} total</span>}
+      />
+
+      <div className="status-strip" aria-label="Application totals">
+        {counts.map(({ status, count }) => (
+          <div key={status}>
+            <span>{status.toLowerCase()}</span>
+            <strong>{count}</strong>
+          </div>
+        ))}
+      </div>
+
+      <section className="application-table" aria-label="Applications">
+        <div className="application-head" aria-hidden="true">
+          <span>company</span><span>role</span><span>first seen</span><span>applied</span><span>status</span><span>note</span><span />
+        </div>
+        {entries.map((application, index) => (
+          <article className="application-row row-enter" style={{ animationDelay: `${Math.min(index, 12) * 18}ms` }} key={application.id}>
+            <strong data-label="company">{application.company}</strong>
+            <h3 data-label="role">{application.title}</h3>
+            <time className="mono-data" data-label="first seen" dateTime={application.firstSeenAt ?? application.appliedAt}>
+              {formatDate(application.firstSeenAt ?? application.appliedAt)}
+            </time>
+            <time className="mono-data" data-label="applied" dateTime={application.appliedAt}>{formatDate(application.appliedAt)}</time>
+            <label data-label="status">
+              <span className="sr-only">Status for {application.company}</span>
+              <select
+                className={`status-select ${statuses[application.id].toLowerCase().replace(" ", "-")}`}
+                value={statuses[application.id]}
+                onChange={(event) => changeStatus(application.id, event.target.value as ApplicationStatus)}
+              >
+                {statusOptions.map((status) => <option key={status}>{status}</option>)}
+              </select>
+            </label>
+            <span className="application-note" data-label="note">{application.note ?? "—"}</span>
+            <a href={application.sourceUrl} target="_blank" rel="noreferrer" aria-label={`Open ${application.company} source`} title="Open source">↗</a>
+          </article>
+        ))}
+        {entries.length === 0 && <p className="empty-message">No applications match this search.</p>}
+      </section>
+    </>
+  );
+}
+
+function CompaniesView({ companies, total, filter, setFilter, showMore }: {
+  companies: typeof watchlist;
+  total: number;
+  filter: CompanyFilter;
+  setFilter: (filter: CompanyFilter) => void;
+  showMore: () => void;
+}) {
   return (
     <>
       <PageHeader
         title="Companies"
-        description="The first four watchlist records defined in the product brief. Each source will route through an ATS-specific adapter."
+        description="The 2026 Fortune 500 plus major technology, finance, research, and growth companies worth tracking."
+        aside={<span className="header-metric">{watchlist.length} tracked</span>}
       />
+
       <section className="table-section" aria-labelledby="companies-heading">
-        <div className="section-header">
-          <div><h2 id="companies-heading">Watchlist seed</h2><p>Official sources only.</p></div>
+        <div className="section-header company-tools">
+          <div>
+            <h2 id="companies-heading">Watchlist</h2>
+            <p>{total} companies match the current filter.</p>
+          </div>
+          <div className="segmented-control" aria-label="Filter company watchlist">
+            {(["all", "fortune", "target"] as CompanyFilter[]).map((option) => (
+              <button key={option} className={filter === option ? "active" : ""} onClick={() => setFilter(option)}>
+                {option === "fortune" ? "fortune 500" : option}
+              </button>
+            ))}
+          </div>
         </div>
+
         <div className="company-table">
           <div className="company-head" aria-hidden="true">
-            <span>Company</span><span>Category</span><span>Priority</span><span>ATS</span><span>Tracking focus</span><span />
+            <span>rank</span><span>company</span><span>category</span><span>cohort</span><span />
           </div>
-          {visibleCompanies.map((company) => (
-            <div className="company-item" key={company.name}>
-              <strong>{company.name}</strong>
-              <span>{company.category}</span>
-              <span className="priority-cell">{company.priority}</span>
-              <span className="mono-data">{company.ats}</span>
-              <span>{company.focus}</span>
-              <a href={company.url} target="_blank" rel="noreferrer" aria-label={`Open ${company.name} careers source`}>
-                source <span aria-hidden="true">↗</span>
-              </a>
-            </div>
+          {companies.map((company, index) => (
+            <article className="company-row row-enter" style={{ animationDelay: `${Math.min(index, 12) * 14}ms` }} key={company.name}>
+              <span className="mono-data" data-label="rank">{company.rank ? String(company.rank).padStart(3, "0") : "—"}</span>
+              <strong data-label="company">{company.name}</strong>
+              <span data-label="category">{company.category}</span>
+              <span className="mono-data" data-label="cohort">{company.cohort}</span>
+              {company.website
+                ? <a href={company.website} target="_blank" rel="noreferrer" aria-label={`Open ${company.name} website`} title="Open company website">↗</a>
+                : <span aria-hidden="true" />}
+            </article>
           ))}
         </div>
+        {companies.length < total && (
+          <button className="load-more" onClick={showMore}>show 100 more</button>
+        )}
       </section>
     </>
   );
 }
 
 function CalendarView() {
-  return (
-    <>
-      <PageHeader
-        title="Release calendar"
-        description="Observed examples and expected windows from the product brief. Forecasts remain visually separate from first-seen facts."
-        aside={<div className="legend"><span><i /> observed</span><span><i className="expected" /> expected</span></div>}
-      />
-      <section className="release-list" aria-label="Summer 2027 release calendar">
-        {releaseCalendar.map((entry) => (
-          <div className="release-month" key={entry.month}>
-            <h2>{entry.month}</h2>
-            <div>
-              {entry.observed.map((company) => <span className="release-entry" key={company}>{company}</span>)}
-              {entry.expected.map((company) => <span className="release-entry expected" key={company}>{company}</span>)}
-            </div>
-          </div>
-        ))}
-      </section>
-    </>
-  );
-}
+  const groups = useMemo(() => {
+    const entries = new Map<string, Application[]>();
+    applications.forEach((application) => {
+      const key = application.appliedAt.slice(0, 7);
+      entries.set(key, [...(entries.get(key) ?? []), application]);
+    });
+    return [...entries.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, []);
 
-function MissingView() {
   return (
     <>
       <PageHeader
-        title="Not released"
-        description="Companies listed in the brief with no detected Summer 2027 internship yet."
+        title="Application calendar"
+        description="A factual timeline of application activity from your tracker."
+        aside={<span className="header-metric">summer 2027</span>}
       />
-      <section className="missing-list" aria-label="Companies with no detected 2027 role">
-        {missingCompanies.map((company, index) => (
-          <div key={company}>
-            <span className="list-index">{String(index + 1).padStart(2, "0")}</span>
-            <strong>{company}</strong>
-            <span>No 2027 internship detected</span>
+      <section className="calendar-list" aria-label="Applications by month">
+        {groups.map(([month, entries], groupIndex) => (
+          <div className="calendar-month row-enter" style={{ animationDelay: `${groupIndex * 45}ms` }} key={month}>
+            <div>
+              <time dateTime={month}>{new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${month}-01T00:00:00Z`))}</time>
+              <span>{entries.length} application{entries.length === 1 ? "" : "s"}</span>
+            </div>
+            <ol>
+              {entries.map((application) => (
+                <li key={application.id}>
+                  <time dateTime={application.appliedAt}>{formatDate(application.appliedAt).replace(", 2026", "")}</time>
+                  <strong>{application.company}</strong>
+                  <span>{application.title}</span>
+                </li>
+              ))}
+            </ol>
           </div>
         ))}
       </section>

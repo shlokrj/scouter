@@ -21,16 +21,16 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     metadataBase: new URL(`${protocol}://${host}`),
-    title: "Scouter — Internship Intelligence",
-    description: "A company-first discovery engine for 2027 software, ML, and data internships.",
+    title: "scouter",
+    description: "Track official internship openings, applications, and the companies expected to hire.",
     openGraph: {
-      title: "Scouter — Internship Intelligence",
-      description: "See high-fit 2027 internships the moment they appear.",
+      title: "scouter",
+      description: "Track official internship openings, applications, and the companies expected to hire.",
     },
     twitter: {
       card: "summary",
-      title: "Scouter — Internship Intelligence",
-      description: "See high-fit 2027 internships the moment they appear.",
+      title: "scouter",
+      description: "Track official internship openings, applications, and the companies expected to hire.",
     },
   };
 }
