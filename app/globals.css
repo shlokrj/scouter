@@ -501,6 +501,30 @@ input:focus-visible {
   font-size: 12px;
 }
 
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 20px 0 0;
+  color: var(--quiet);
+  font: 9px var(--font-space-mono), monospace;
+}
+
+.pagination button {
+  padding: 0 0 6px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 150ms ease, color 150ms ease;
+}
+
+.pagination button:hover:not(:disabled) { border-color: var(--orange); color: var(--orange); }
+.pagination button:disabled { color: var(--quiet); cursor: default; opacity: .55; }
+
 .site-footer {
   display: flex;
   min-height: 62px;
@@ -667,6 +691,7 @@ input:focus-visible {
 
   .opening-row a,
   .company-row a { justify-content: flex-end; }
+  .pagination { justify-content: flex-start; }
   .site-footer { align-items: flex-start; flex-direction: column; justify-content: center; gap: 7px; }
 }
 

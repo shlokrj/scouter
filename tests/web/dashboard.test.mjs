@@ -85,6 +85,9 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(dashboard, /undergraduateOnly/);
   assert.match(dashboard, /type="checkbox"/);
   assert.match(dashboard, /undergraduate/);
+  assert.match(dashboard, /PAGE_SIZE = 25/);
+  assert.match(dashboard, /function Pagination/);
+  assert.match(dashboard, /aria-label="Pagination"/);
   assert.match(dashboard, /made by shlok\.fyi/);
   assert.match(auth, /SCOUTER_OWNER_PASSWORD/);
   assert.match(auth, /crypto\.subtle/);

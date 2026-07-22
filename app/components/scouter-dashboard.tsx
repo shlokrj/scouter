@@ -31,6 +31,19 @@ const priorityLevels = [
   { value: 2, label: "faang+" },
 ] as const;
 
+const PAGE_SIZE = 25;
+
+function paginate<T>(items: T[], page: number) {
+  const pageCount = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const start = (currentPage - 1) * PAGE_SIZE;
+  return {
+    items: items.slice(start, start + PAGE_SIZE),
+    currentPage,
+    pageCount,
+  };
+}
+
 function formatDate(value: string | null) {
   if (!value) return "—";
   return new Intl.DateTimeFormat("en-US", {
@@ -69,6 +82,7 @@ export function ScouterDashboard() {
   const [priorityLevel, setPriorityLevel] = useState(0);
   const [summer2027Only, setSummer2027Only] = useState(false);
   const [undergraduateOnly, setUndergraduateOnly] = useState(false);
+  const [page, setPage] = useState(1);
   const [payload, setPayload] = useState<OpeningsPayload | null>(null);
   const [refreshing, setRefreshing] = useState(true);
   const [error, setError] = useState(false);
@@ -110,9 +124,13 @@ export function ScouterDashboard() {
     );
   }, [query]);
 
+  const openingPage = useMemo(() => paginate(openings, page), [openings, page]);
+  const companyPage = useMemo(() => paginate(companies, page), [companies, page]);
+
   const selectView = (nextView: View) => {
     setView(nextView);
     setQuery("");
+    setPage(1);
   };
 
   return (
@@ -161,7 +179,7 @@ export function ScouterDashboard() {
                 <input
                   type="search"
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => { setQuery(event.target.value); setPage(1); }}
                   placeholder={view === "openings" ? "company or position" : "company, category, or group"}
                   aria-label={`Search ${view}`}
                 />
@@ -181,23 +199,23 @@ export function ScouterDashboard() {
                   max="2"
                   step="1"
                   value={priorityLevel}
-                  onChange={(event) => setPriorityLevel(Number(event.target.value))}
+                  onChange={(event) => { setPriorityLevel(Number(event.target.value)); setPage(1); }}
                   aria-label="Company priority"
                   aria-valuetext={priorityLevels[priorityLevel].label}
                 />
                 <div className="priority-labels">
                   {priorityLevels.map((level) => (
-                    <button key={level.value} className={priorityLevel === level.value ? "active" : ""} onClick={() => setPriorityLevel(level.value)}>{level.label}</button>
+                    <button key={level.value} className={priorityLevel === level.value ? "active" : ""} onClick={() => { setPriorityLevel(level.value); setPage(1); }}>{level.label}</button>
                   ))}
                 </div>
                 <div className="confirmed-toggles">
                   <label className={`confirmed-toggle ${summer2027Only ? "active" : ""}`}>
-                    <input type="checkbox" checked={summer2027Only} onChange={(event) => setSummer2027Only(event.target.checked)} />
+                    <input type="checkbox" checked={summer2027Only} onChange={(event) => { setSummer2027Only(event.target.checked); setPage(1); }} />
                     <span className="toggle-track" aria-hidden="true" />
                     <span>confirmed 2027</span>
                   </label>
                   <label className={`confirmed-toggle ${undergraduateOnly ? "active" : ""}`}>
-                    <input type="checkbox" checked={undergraduateOnly} onChange={(event) => setUndergraduateOnly(event.target.checked)} />
+                    <input type="checkbox" checked={undergraduateOnly} onChange={(event) => { setUndergraduateOnly(event.target.checked); setPage(1); }} />
                     <span className="toggle-track" aria-hidden="true" />
                     <span>undergraduate</span>
                   </label>
@@ -208,14 +226,25 @@ export function ScouterDashboard() {
 
           {view === "openings" ? (
             <OpeningsFeed
-              openings={openings}
+              openings={openingPage.items}
+              total={openings.length}
+              currentPage={openingPage.currentPage}
+              pageCount={openingPage.pageCount}
+              onPageChange={setPage}
               payload={payload}
               refreshing={refreshing}
               error={error}
               filtered={Boolean(query) || priorityLevel > 0 || summer2027Only || undergraduateOnly}
             />
           ) : (
-            <CompaniesFeed companies={companies} filtered={Boolean(query)} />
+            <CompaniesFeed
+              companies={companyPage.items}
+              total={companies.length}
+              currentPage={companyPage.currentPage}
+              pageCount={companyPage.pageCount}
+              onPageChange={setPage}
+              filtered={Boolean(query)}
+            />
           )}
         </div>
       </main>
@@ -236,8 +265,12 @@ export function ScouterDashboard() {
   );
 }
 
-function OpeningsFeed({ openings, payload, refreshing, error, filtered }: {
+function OpeningsFeed({ openings, total, currentPage, pageCount, onPageChange, payload, refreshing, error, filtered }: {
   openings: Opening[];
+  total: number;
+  currentPage: number;
+  pageCount: number;
+  onPageChange: (page: number) => void;
   payload: OpeningsPayload | null;
   refreshing: boolean;
   error: boolean;
@@ -253,10 +286,13 @@ function OpeningsFeed({ openings, payload, refreshing, error, filtered }: {
               ? "Loading undergraduate Summer 2027 openings."
               : error && !payload
                 ? "The opening feeds are unavailable. Try refresh."
-                : `${openings.length} positions · ${payload?.sourcesChecked ?? 0}/${payload?.sourceCount ?? 0} sources · updated ${payload ? formatTime(payload.checkedAt) : "now"}`}
+                : `${total} positions · ${payload?.sourcesChecked ?? 0}/${payload?.sourceCount ?? 0} sources · updated ${payload ? formatTime(payload.checkedAt) : "now"}`}
           </p>
         </div>
-        {filtered && <span className="result-note">filtered from {payload?.openings.length ?? 0}</span>}
+        <span className="result-note">
+          {total ? `${(currentPage - 1) * PAGE_SIZE + 1}–${Math.min(currentPage * PAGE_SIZE, total)} of ${total}` : "0 of 0"}
+          {filtered && ` · filtered from ${payload?.openings.length ?? 0}`}
+        </span>
       </div>
 
       <div className="opening-table" aria-live="polite">
@@ -283,19 +319,30 @@ function OpeningsFeed({ openings, payload, refreshing, error, filtered }: {
         ))}
         {!refreshing && openings.length === 0 && <p className="empty-message">No positions match these filters.</p>}
       </div>
+      <Pagination currentPage={currentPage} pageCount={pageCount} onPageChange={onPageChange} />
     </section>
   );
 }
 
-function CompaniesFeed({ companies, filtered }: { companies: typeof watchlist; filtered: boolean }) {
+function CompaniesFeed({ companies, total, currentPage, pageCount, onPageChange, filtered }: {
+  companies: typeof watchlist;
+  total: number;
+  currentPage: number;
+  pageCount: number;
+  onPageChange: (page: number) => void;
+  filtered: boolean;
+}) {
   return (
     <section className="feed" aria-labelledby="companies-heading">
       <div className="feed-meta">
         <div>
           <h2 id="companies-heading">All companies</h2>
-          <p>{companies.length} companies in the tracking universe.</p>
+          <p>{total} companies in the tracking universe.</p>
         </div>
-        {filtered && <span className="result-note">filtered from {watchlist.length}</span>}
+        <span className="result-note">
+          {total ? `${(currentPage - 1) * PAGE_SIZE + 1}–${Math.min(currentPage * PAGE_SIZE, total)} of ${total}` : "0 of 0"}
+          {filtered && ` · filtered from ${watchlist.length}`}
+        </span>
       </div>
 
       <div className="company-table">
@@ -315,6 +362,23 @@ function CompaniesFeed({ companies, filtered }: { companies: typeof watchlist; f
         ))}
         {companies.length === 0 && <p className="empty-message">No companies match this search.</p>}
       </div>
+      <Pagination currentPage={currentPage} pageCount={pageCount} onPageChange={onPageChange} />
     </section>
+  );
+}
+
+function Pagination({ currentPage, pageCount, onPageChange }: {
+  currentPage: number;
+  pageCount: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (pageCount <= 1) return null;
+
+  return (
+    <nav className="pagination" aria-label="Pagination">
+      <button type="button" onClick={() => onPageChange(currentPage - 1)} disabled={currentPage === 1}>prev</button>
+      <span aria-live="polite">page {currentPage} / {pageCount}</span>
+      <button type="button" onClick={() => onPageChange(currentPage + 1)} disabled={currentPage === pageCount}>next</button>
+    </nav>
   );
 }
