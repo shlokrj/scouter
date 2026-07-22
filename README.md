@@ -14,10 +14,10 @@ The current dashboard prototype includes:
 
 - a live feed of new and changed roles
 - fit scores and first-seen timestamps
-- source-health and scan status signals
-- company monitoring coverage
+- a seed company watchlist with official source links
 - a historical and forecasted release calendar
-- local search, relevance filtering, and bookmarks
+- a missing-company view
+- local search and priority filtering
 
 ## Local development
 
