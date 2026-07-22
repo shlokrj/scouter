@@ -118,6 +118,7 @@ export function ScouterDashboard() {
             <button className={view === "openings" ? "active" : ""} aria-current={view === "openings" ? "page" : undefined} onClick={() => selectView("openings")}>openings</button>
             <button className={view === "companies" ? "active" : ""} aria-current={view === "companies" ? "page" : undefined} onClick={() => selectView("companies")}>companies</button>
           </nav>
+          <a className="maker-link" href="https://shlok.fyi/" target="_blank" rel="noreferrer">made by shlok.fyi <span aria-hidden="true">↗</span></a>
         </div>
       </header>
 

@@ -53,6 +53,7 @@ export default function LoginPage() {
           {message && <p className="login-message" role="alert">{message}</p>}
           <button type="submit" disabled={submitting}>{submitting ? "checking" : "continue"} <span aria-hidden="true">↗</span></button>
         </form>
+        <a className="login-credit" href="https://shlok.fyi/" target="_blank" rel="noreferrer">made by shlok.fyi <span aria-hidden="true">↗</span></a>
       </section>
     </main>
   );

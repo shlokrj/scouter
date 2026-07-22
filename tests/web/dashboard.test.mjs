@@ -31,6 +31,7 @@ test("server-renders the owner password screen", async () => {
   assert.match(html, /Enter password/i);
   assert.match(html, /autoComplete="current-password"/);
   assert.match(html, /Scouter is private/i);
+  assert.match(html, /made by shlok\.fyi/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
@@ -74,6 +75,7 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(dashboard, /href="\/login"/);
   assert.match(dashboard, /last refresh/);
   assert.match(dashboard, /confirmed 2027/);
+  assert.match(dashboard, /made by shlok\.fyi/);
   assert.match(auth, /SCOUTER_OWNER_PASSWORD/);
   assert.match(auth, /crypto\.subtle/);
   assert.doesNotMatch(auth, new RegExp("Demo" + "123"));

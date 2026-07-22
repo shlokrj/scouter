@@ -116,6 +116,17 @@ input:focus-visible {
 .header-inner nav button.active { color: var(--text); }
 .header-inner nav button.active::after { transform: scaleX(1); }
 
+.maker-link {
+  margin-left: auto;
+  color: var(--quiet);
+  font: 9px var(--font-space-mono), monospace;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 150ms ease;
+}
+
+.maker-link:hover { color: var(--orange); }
+
 .main-content {
   flex: 1;
   padding: 76px 0 110px;
@@ -521,6 +532,17 @@ input:focus-visible {
 .login-panel button:disabled { cursor: wait; color: var(--quiet); }
 .login-message { margin: 16px 0 0; color: #ff9373; font: 9px var(--font-space-mono), monospace; }
 
+.login-credit {
+  display: inline-block;
+  margin-top: 54px;
+  color: var(--quiet);
+  font: 9px var(--font-space-mono), monospace;
+  text-decoration: none;
+  transition: color 150ms ease;
+}
+
+.login-credit:hover { color: var(--orange); }
+
 @keyframes view-in {
   from { opacity: 0; transform: translateY(5px); }
   to { opacity: 1; transform: translateY(0); }
@@ -592,7 +614,9 @@ input:focus-visible {
 }
 
 @media (max-width: 440px) {
-  .header-inner nav { gap: 20px; }
+  .header-inner { gap: 16px; }
+  .header-inner nav { gap: 16px; }
+  .maker-link { font-size: 7px; }
   .page-header h1 { font-size: 36px; }
   .opening-row,
   .company-row { grid-template-columns: 1fr; }
