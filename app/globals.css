@@ -312,6 +312,53 @@ input:focus-visible {
 .priority-labels button:hover { color: var(--muted); }
 .priority-labels button.active { color: var(--text); }
 
+.confirmed-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 23px;
+  color: var(--quiet);
+  cursor: pointer;
+  font: 8px var(--font-space-mono), monospace;
+  transition: color 150ms ease;
+}
+
+.confirmed-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.toggle-track {
+  position: relative;
+  width: 25px;
+  height: 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.toggle-track::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--quiet);
+  transition: transform 150ms ease, background 150ms ease;
+}
+
+.confirmed-toggle:hover,
+.confirmed-toggle.active { color: var(--text); }
+.confirmed-toggle input:checked + .toggle-track { border-color: var(--orange); background: color-mix(in srgb, var(--orange) 12%, transparent); }
+.confirmed-toggle input:checked + .toggle-track::after { background: var(--orange); transform: translateX(11px); }
+.confirmed-toggle input:focus-visible + .toggle-track { outline: 1px solid var(--orange); outline-offset: 3px; }
+
 .feed { padding-top: 42px; }
 
 .feed-meta {

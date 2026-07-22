@@ -68,6 +68,7 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(rolesRoute, /graduateOnlySignal/);
   assert.match(rolesRoute, /explicitlySummer2027/);
   assert.match(rolesRoute, /isSummer2027Confirmed/);
+  assert.match(rolesRoute, /hasUndergraduateSignal/);
   assert.match(rolesRoute, /summer2027Confirmed/);
   assert.match(rolesRoute, /companyKey/);
   assert.match(rolesRoute, /roleTokens/);
@@ -79,6 +80,9 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(dashboard, /href="\/login"/);
   assert.match(dashboard, /last refresh/);
   assert.match(dashboard, /confirmed 2027/);
+  assert.match(dashboard, /confirmedOnly/);
+  assert.match(dashboard, /type="checkbox"/);
+  assert.match(dashboard, /confirmed 2027 \+ undergraduate/);
   assert.match(dashboard, /made by shlok\.fyi/);
   assert.match(auth, /SCOUTER_OWNER_PASSWORD/);
   assert.match(auth, /crypto\.subtle/);

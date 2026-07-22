@@ -78,6 +78,10 @@ function companyPriority(company: string): CompanyPriority {
   return "all";
 }
 
+function hasUndergraduateSignal(value: string) {
+  return /\b(undergrad(?:uate)?|bachelor'?s?|bs|bsc)\b/i.test(value);
+}
+
 function inScope(position: string) {
   const value = position.toLowerCase();
   const explicitlySummer2027 = /summer\s+2027/.test(value);
@@ -86,14 +90,15 @@ function inScope(position: string) {
   const nonSummerCoop = /\bco-?op\b/.test(value) && !explicitlySummer2027;
   if ((otherSeason && !explicitlySummer2027) || mixedYear || nonSummerCoop) return false;
 
-  const undergraduateSignal = /\b(undergrad(?:uate)?|bachelor'?s?|bs|bsc)\b/.test(value);
+  const undergraduateSignal = hasUndergraduateSignal(position);
   const graduateOnlySignal = /\b(ph\.?d\.?|doctoral|doctorate|master'?s?|masters|ms|mba|graduate)\b/.test(value);
   return !graduateOnlySignal || undergraduateSignal;
 }
 
 function isSummer2027Confirmed(position: string, applyUrl: string) {
   const sourceSignal = `${position} ${decodeHtml(applyUrl)}`;
-  return /\b(?:summer\s*[-–]?\s*2027|2027\s+summer)\b/i.test(sourceSignal);
+  return /\b(?:summer\s*[-–]?\s*2027|2027\s+summer)\b/i.test(sourceSignal)
+    && hasUndergraduateSignal(position);
 }
 
 function parseSndsh404(markdown: string): Opening[] {

@@ -66,6 +66,7 @@ export function ScouterDashboard() {
   const [view, setView] = useState<View>("openings");
   const [query, setQuery] = useState("");
   const [priorityLevel, setPriorityLevel] = useState(0);
+  const [confirmedOnly, setConfirmedOnly] = useState(false);
   const [payload, setPayload] = useState<OpeningsPayload | null>(null);
   const [refreshing, setRefreshing] = useState(true);
   const [error, setError] = useState(false);
@@ -93,9 +94,11 @@ export function ScouterDashboard() {
     const term = query.trim().toLowerCase();
     return (payload?.openings ?? []).filter((opening) => {
       const matchesQuery = !term || `${opening.company} ${opening.position}`.toLowerCase().includes(term);
-      return matchesQuery && matchesPriority(opening.priority, priorityLevel);
+      return matchesQuery
+        && matchesPriority(opening.priority, priorityLevel)
+        && (!confirmedOnly || opening.summer2027Confirmed);
     });
-  }, [payload, priorityLevel, query]);
+  }, [confirmedOnly, payload, priorityLevel, query]);
 
   const companies = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -184,6 +187,11 @@ export function ScouterDashboard() {
                     <button key={level.value} className={priorityLevel === level.value ? "active" : ""} onClick={() => setPriorityLevel(level.value)}>{level.label}</button>
                   ))}
                 </div>
+                <label className={`confirmed-toggle ${confirmedOnly ? "active" : ""}`}>
+                  <input type="checkbox" checked={confirmedOnly} onChange={(event) => setConfirmedOnly(event.target.checked)} />
+                  <span className="toggle-track" aria-hidden="true" />
+                  <span>confirmed 2027 + undergraduate</span>
+                </label>
               </div>
             )}
           </section>
@@ -194,7 +202,7 @@ export function ScouterDashboard() {
               payload={payload}
               refreshing={refreshing}
               error={error}
-              filtered={Boolean(query) || priorityLevel > 0}
+              filtered={Boolean(query) || priorityLevel > 0 || confirmedOnly}
             />
           ) : (
             <CompaniesFeed companies={companies} filtered={Boolean(query)} />
@@ -249,7 +257,7 @@ function OpeningsFeed({ openings, payload, refreshing, error, filtered }: {
           <article className={`opening-row row-enter ${opening.summer2027Confirmed ? "summer-confirmed" : ""}`} style={{ animationDelay: `${Math.min(index, 14) * 18}ms` }} key={opening.id}>
             <strong data-label="company">
               {opening.company}
-              {opening.summer2027Confirmed && <span className="confirmed-mark" title="The source explicitly identifies this opening as Summer 2027">confirmed 2027</span>}
+              {opening.summer2027Confirmed && <span className="confirmed-mark" title="The source explicitly identifies this opening as Summer 2027 and undergraduate">confirmed 2027 + ug</span>}
             </strong>
             <h3 data-label="position">{opening.position}</h3>
             <time className="mono-data" data-label="date posted" dateTime={opening.postedAt ?? undefined}>{formatDate(opening.postedAt)}</time>
