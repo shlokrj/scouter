@@ -312,11 +312,17 @@ input:focus-visible {
 .priority-labels button:hover { color: var(--muted); }
 .priority-labels button.active { color: var(--text); }
 
+.confirmed-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-top: 23px;
+}
+
 .confirmed-toggle {
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  margin-top: 23px;
   color: var(--quiet);
   cursor: pointer;
   font: 8px var(--font-space-mono), monospace;
@@ -439,13 +445,17 @@ input:focus-visible {
 }
 
 .confirmed-mark {
-  display: block;
-  width: fit-content;
-  margin-top: 6px;
   color: var(--orange);
   font: 8px var(--font-space-mono), monospace;
   font-weight: 400;
   letter-spacing: .015em;
+}
+
+.confirmation-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 9px;
+  margin-top: 6px;
 }
 
 .summer-confirmed:hover { border-color: color-mix(in srgb, var(--orange) 45%, var(--border)); }

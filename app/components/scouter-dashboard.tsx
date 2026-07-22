@@ -15,6 +15,7 @@ type Opening = {
   applyUrl: string;
   priority: CompanyPriority;
   summer2027Confirmed: boolean;
+  undergraduateConfirmed: boolean;
 };
 
 type OpeningsPayload = {
@@ -66,7 +67,8 @@ export function ScouterDashboard() {
   const [view, setView] = useState<View>("openings");
   const [query, setQuery] = useState("");
   const [priorityLevel, setPriorityLevel] = useState(0);
-  const [confirmedOnly, setConfirmedOnly] = useState(false);
+  const [summer2027Only, setSummer2027Only] = useState(false);
+  const [undergraduateOnly, setUndergraduateOnly] = useState(false);
   const [payload, setPayload] = useState<OpeningsPayload | null>(null);
   const [refreshing, setRefreshing] = useState(true);
   const [error, setError] = useState(false);
@@ -96,9 +98,10 @@ export function ScouterDashboard() {
       const matchesQuery = !term || `${opening.company} ${opening.position}`.toLowerCase().includes(term);
       return matchesQuery
         && matchesPriority(opening.priority, priorityLevel)
-        && (!confirmedOnly || opening.summer2027Confirmed);
+        && (!summer2027Only || opening.summer2027Confirmed)
+        && (!undergraduateOnly || opening.undergraduateConfirmed);
     });
-  }, [confirmedOnly, payload, priorityLevel, query]);
+  }, [payload, priorityLevel, query, summer2027Only, undergraduateOnly]);
 
   const companies = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -187,11 +190,18 @@ export function ScouterDashboard() {
                     <button key={level.value} className={priorityLevel === level.value ? "active" : ""} onClick={() => setPriorityLevel(level.value)}>{level.label}</button>
                   ))}
                 </div>
-                <label className={`confirmed-toggle ${confirmedOnly ? "active" : ""}`}>
-                  <input type="checkbox" checked={confirmedOnly} onChange={(event) => setConfirmedOnly(event.target.checked)} />
-                  <span className="toggle-track" aria-hidden="true" />
-                  <span>confirmed 2027 + undergraduate</span>
-                </label>
+                <div className="confirmed-toggles">
+                  <label className={`confirmed-toggle ${summer2027Only ? "active" : ""}`}>
+                    <input type="checkbox" checked={summer2027Only} onChange={(event) => setSummer2027Only(event.target.checked)} />
+                    <span className="toggle-track" aria-hidden="true" />
+                    <span>confirmed 2027</span>
+                  </label>
+                  <label className={`confirmed-toggle ${undergraduateOnly ? "active" : ""}`}>
+                    <input type="checkbox" checked={undergraduateOnly} onChange={(event) => setUndergraduateOnly(event.target.checked)} />
+                    <span className="toggle-track" aria-hidden="true" />
+                    <span>undergraduate</span>
+                  </label>
+                </div>
               </div>
             )}
           </section>
@@ -202,7 +212,7 @@ export function ScouterDashboard() {
               payload={payload}
               refreshing={refreshing}
               error={error}
-              filtered={Boolean(query) || priorityLevel > 0 || confirmedOnly}
+              filtered={Boolean(query) || priorityLevel > 0 || summer2027Only || undergraduateOnly}
             />
           ) : (
             <CompaniesFeed companies={companies} filtered={Boolean(query)} />
@@ -254,10 +264,15 @@ function OpeningsFeed({ openings, payload, refreshing, error, filtered }: {
           <span>company</span><span>position</span><span>date posted</span><span>application</span>
         </div>
         {openings.map((opening, index) => (
-          <article className={`opening-row row-enter ${opening.summer2027Confirmed ? "summer-confirmed" : ""}`} style={{ animationDelay: `${Math.min(index, 14) * 18}ms` }} key={opening.id}>
+          <article className={`opening-row row-enter ${opening.summer2027Confirmed || opening.undergraduateConfirmed ? "summer-confirmed" : ""}`} style={{ animationDelay: `${Math.min(index, 14) * 18}ms` }} key={opening.id}>
             <strong data-label="company">
               {opening.company}
-              {opening.summer2027Confirmed && <span className="confirmed-mark" title="The source explicitly identifies this opening as Summer 2027 and undergraduate">confirmed 2027 + ug</span>}
+              {(opening.summer2027Confirmed || opening.undergraduateConfirmed) && (
+                <span className="confirmation-marks">
+                  {opening.summer2027Confirmed && <span className="confirmed-mark" title="The source explicitly identifies this opening as Summer 2027">confirmed 2027</span>}
+                  {opening.undergraduateConfirmed && <span className="confirmed-mark" title="The source explicitly identifies undergraduate eligibility">undergraduate</span>}
+                </span>
+              )}
             </strong>
             <h3 data-label="position">{opening.position}</h3>
             <time className="mono-data" data-label="date posted" dateTime={opening.postedAt ?? undefined}>{formatDate(opening.postedAt)}</time>

@@ -11,6 +11,7 @@ type Opening = {
   applyUrl: string;
   priority: CompanyPriority;
   summer2027Confirmed: boolean;
+  undergraduateConfirmed: boolean;
 };
 
 const feeds = {
@@ -97,8 +98,7 @@ function inScope(position: string) {
 
 function isSummer2027Confirmed(position: string, applyUrl: string) {
   const sourceSignal = `${position} ${decodeHtml(applyUrl)}`;
-  return /\b(?:summer\s*[-–]?\s*2027|2027\s+summer)\b/i.test(sourceSignal)
-    && hasUndergraduateSignal(position);
+  return /\b(?:summer\s*[-–]?\s*2027|2027\s+summer)\b/i.test(sourceSignal);
 }
 
 function parseSndsh404(markdown: string): Opening[] {
@@ -122,6 +122,7 @@ function parseSndsh404(markdown: string): Opening[] {
       applyUrl: decodeHtml(applyUrl),
       priority: companyPriority(company),
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
+      undergraduateConfirmed: hasUndergraduateSignal(position),
     }];
   });
 }
@@ -170,6 +171,7 @@ function parseSpeedyapply(markdown: string): Opening[] {
       applyUrl: decodeHtml(applyUrl),
       priority: companyPriority(company),
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
+      undergraduateConfirmed: hasUndergraduateSignal(position),
     }];
   });
 }
@@ -199,6 +201,7 @@ function parseVanshb03(markdown: string): Opening[] {
       applyUrl: decodeHtml(applyUrl),
       priority: companyPriority(company),
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
+      undergraduateConfirmed: hasUndergraduateSignal(position),
     }];
   });
 }
@@ -223,6 +226,7 @@ function parseChieler(markdown: string): Opening[] {
       applyUrl: decodeHtml(applyUrl),
       priority: companyPriority(company),
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
+      undergraduateConfirmed: hasUndergraduateSignal(position),
     }];
   });
 }
@@ -268,9 +272,8 @@ function canonicalUrl(value: string) {
 }
 
 function openingQuality(opening: Opening) {
-  const undergraduateDetail = /\b(?:undergrad(?:uate)?|bachelor'?s?|bs|bsc)\b/i.test(opening.position);
   return (opening.summer2027Confirmed ? 100 : 0)
-    + (undergraduateDetail ? 10 : 0)
+    + (opening.undergraduateConfirmed ? 10 : 0)
     + (opening.postedAt ? 2 : 0)
     + Math.min(opening.position.length, 100) / 1000;
 }
@@ -282,6 +285,7 @@ function keepBestOpening(left: Opening, right: Opening) {
     ...preferred,
     postedAt: preferred.postedAt ?? alternate.postedAt,
     summer2027Confirmed: left.summer2027Confirmed || right.summer2027Confirmed,
+    undergraduateConfirmed: left.undergraduateConfirmed || right.undergraduateConfirmed,
   };
 }
 
