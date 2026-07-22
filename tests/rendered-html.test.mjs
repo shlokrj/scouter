@@ -22,20 +22,21 @@ test("server-renders the Scouter dashboard", async () => {
   const html = await response.text();
   assert.match(html, /<title>scouter<\/title>/i);
   assert.match(html, /aria-label="scouter home"/i);
-  assert.match(html, /Open internships/);
-  assert.match(html, /Checking company career pages now/);
-  assert.match(html, /724(?:<!-- -->)? companies tracked/);
+  assert.match(html, />scouter<\/a>/i);
+  assert.match(html, /Internship openings/);
+  assert.match(html, /Loading every opening/);
+  assert.match(html, /date posted/);
+  assert.doesNotMatch(html, /applications imported|application calendar|status-select/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
 test("keeps the product metadata and private-doc policy explicit", async () => {
-  const [layout, page, dashboard, rolesRoute, applications, watchlist, gitignore, license, packageJson] = await Promise.all([
+  const [layout, page, dashboard, rolesRoute, icon, gitignore, license, packageJson] = await Promise.all([
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/scouter-dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/roles/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/data/applications.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/data/watchlist.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/icon.svg", import.meta.url), "utf8"),
     readFile(new URL("../.gitignore", import.meta.url), "utf8"),
     readFile(new URL("../LICENSE", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
@@ -46,13 +47,12 @@ test("keeps the product metadata and private-doc policy explicit", async () => {
   assert.match(layout, /Space_Mono/);
   assert.match(layout, /metadataBase/);
   assert.match(page, /ScouterDashboard/);
-  assert.match(dashboard, /localStorage/);
-  assert.match(dashboard, /application\.firstSeenAt/);
-  assert.match(rolesRoute, /boards-api\.greenhouse\.io/);
-  assert.match(rolesRoute, /api\.ashbyhq\.com/);
-  assert.match(applications, /firstSeenAt: "2026-07-20"/);
-  assert.match(watchlist, /"name": "Amazon"/);
-  assert.match(watchlist, /"name": "Google"/);
+  assert.doesNotMatch(dashboard, /localStorage|ApplicationStatus|status-select/);
+  assert.match(rolesRoute, /sndsh404\/summer-2027-internships/);
+  assert.match(rolesRoute, /speedyapply\/2027-SWE-College-Jobs/);
+  assert.match(rolesRoute, /dedupe\(\[\.\.\.sndshOpenings, \.\.\.speedyOpenings\]\)/);
+  assert.match(icon, /<text[^>]*>s<\/text>/);
+  assert.match(icon, /#ff7043/);
   assert.match(gitignore, /\*\.md/);
   assert.match(gitignore, /!README\.md/);
   assert.match(license, /MIT License/);
