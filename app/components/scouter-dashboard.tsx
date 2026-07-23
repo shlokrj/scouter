@@ -16,7 +16,7 @@ type Opening = {
   priority: CompanyPriority;
   summer2027Confirmed: boolean;
   undergraduateConfirmed: boolean;
-  isNewToday: boolean;
+  isNew: boolean;
 };
 
 type OpeningsPayload = {
@@ -83,7 +83,7 @@ export function ScouterDashboard() {
   const [priorityLevel, setPriorityLevel] = useState(0);
   const [summer2027Only, setSummer2027Only] = useState(false);
   const [undergraduateOnly, setUndergraduateOnly] = useState(false);
-  const [newTodayOnly, setNewTodayOnly] = useState(false);
+  const [newOnly, setNewOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [payload, setPayload] = useState<OpeningsPayload | null>(null);
   const [refreshing, setRefreshing] = useState(true);
@@ -116,9 +116,9 @@ export function ScouterDashboard() {
         && matchesPriority(opening.priority, priorityLevel)
         && (!summer2027Only || opening.summer2027Confirmed)
         && (!undergraduateOnly || opening.undergraduateConfirmed)
-        && (!newTodayOnly || opening.isNewToday);
+        && (!newOnly || opening.isNew);
     });
-  }, [newTodayOnly, payload, priorityLevel, query, summer2027Only, undergraduateOnly]);
+  }, [newOnly, payload, priorityLevel, query, summer2027Only, undergraduateOnly]);
 
   const companies = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -222,8 +222,8 @@ export function ScouterDashboard() {
                     <span className="toggle-track" aria-hidden="true" />
                     <span>undergraduate</span>
                   </label>
-                  <label className={`confirmed-toggle ${newTodayOnly ? "active" : ""}`}>
-                    <input type="checkbox" checked={newTodayOnly} onChange={(event) => { setNewTodayOnly(event.target.checked); setPage(1); }} />
+                  <label className={`confirmed-toggle ${newOnly ? "active" : ""}`}>
+                    <input type="checkbox" checked={newOnly} onChange={(event) => { setNewOnly(event.target.checked); setPage(1); }} />
                     <span className="toggle-track" aria-hidden="true" />
                     <span>new</span>
                   </label>
@@ -242,7 +242,7 @@ export function ScouterDashboard() {
               payload={payload}
               refreshing={refreshing}
               error={error}
-              filtered={Boolean(query) || priorityLevel > 0 || summer2027Only || undergraduateOnly || newTodayOnly}
+              filtered={Boolean(query) || priorityLevel > 0 || summer2027Only || undergraduateOnly || newOnly}
             />
           ) : (
             <CompaniesFeed
@@ -308,14 +308,14 @@ function OpeningsFeed({ openings, total, currentPage, pageCount, onPageChange, p
           <span>company</span><span>position</span><span>date posted</span><span>application</span>
         </div>
         {openings.map((opening, index) => (
-          <article className={`opening-row row-enter ${opening.summer2027Confirmed || opening.undergraduateConfirmed || opening.isNewToday ? "summer-confirmed" : ""}`} style={{ animationDelay: `${Math.min(index, 14) * 18}ms` }} key={opening.id}>
+          <article className={`opening-row row-enter ${opening.summer2027Confirmed || opening.undergraduateConfirmed || opening.isNew ? "summer-confirmed" : ""}`} style={{ animationDelay: `${Math.min(index, 14) * 18}ms` }} key={opening.id}>
             <strong data-label="company">
               {opening.company}
-              {(opening.summer2027Confirmed || opening.undergraduateConfirmed || opening.isNewToday) && (
+              {(opening.summer2027Confirmed || opening.undergraduateConfirmed || opening.isNew) && (
                 <span className="confirmation-marks">
                   {opening.summer2027Confirmed && <span className="confirmed-mark" title="The source explicitly identifies this opening as Summer 2027">confirmed 2027</span>}
                   {opening.undergraduateConfirmed && <span className="confirmed-mark" title="The source explicitly identifies undergraduate eligibility">undergraduate</span>}
-                  {opening.isNewToday && <span className="new-mark" title="The source reports this opening today">new</span>}
+                  {opening.isNew && <span className="new-mark" title="Scouter discovered this opening in the past seven days">new</span>}
                 </span>
               )}
             </strong>

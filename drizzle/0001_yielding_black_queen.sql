@@ -1,0 +1,1 @@
+ALTER TABLE `discovered_openings` ADD `is_baseline` integer DEFAULT false NOT NULL;

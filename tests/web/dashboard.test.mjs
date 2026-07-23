@@ -36,13 +36,12 @@ test("server-renders the owner password screen", async () => {
 });
 
 test("keeps the product metadata and deployment setup explicit", async () => {
-  const [layout, page, dashboard, rolesRoute, smsRoute, smsAlerts, auth, loginRoute, icon, gitignore, license, readme, packageJson, vercelConfig] = await Promise.all([
+  const [layout, page, dashboard, rolesRoute, discoveryStore, auth, loginRoute, icon, gitignore, license, readme, packageJson, vercelConfig] = await Promise.all([
     readFile(new URL("../../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/components/scouter-dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/api/roles/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../../app/api/alerts/sms/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../../app/lib/sms-alerts.ts", import.meta.url), "utf8"),
+    readFile(new URL("../../app/lib/discovery-store.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/lib/owner-auth.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/api/auth/login/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/icon.svg", import.meta.url), "utf8"),
@@ -66,14 +65,20 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(rolesRoute, /Chieler\/Summer-2027-SWE-Internships/);
   assert.match(rolesRoute, /parseVanshb03/);
   assert.match(rolesRoute, /parseChieler/);
-  assert.match(rolesRoute, /dedupe\(\[\.\.\.sndshOpenings, \.\.\.speedyOpenings, \.\.\.vanshOpenings, \.\.\.chielerOpenings\]\)/);
+  assert.match(rolesRoute, /parseGreenhouse/);
+  assert.match(rolesRoute, /fetchGreenhouse/);
+  assert.match(rolesRoute, /greenhouseBoards/);
+  assert.match(rolesRoute, /isTechnicalRole/);
+  assert.match(rolesRoute, /systems\?\\s\+/);
+  assert.match(rolesRoute, /greenhouseOpenings/);
   assert.match(rolesRoute, /graduateOnlySignal/);
   assert.match(rolesRoute, /explicitlySummer2027/);
   assert.match(rolesRoute, /isSummer2027Confirmed/);
   assert.match(rolesRoute, /hasUndergraduateSignal/);
   assert.match(rolesRoute, /summer2027Confirmed/);
   assert.match(rolesRoute, /undergraduateConfirmed/);
-  assert.match(rolesRoute, /isNewToday/);
+  assert.match(rolesRoute, /annotateDiscoveries/);
+  assert.match(rolesRoute, /openingFingerprint/);
   assert.match(rolesRoute, /companyAliases/);
   assert.match(rolesRoute, /hewlettpackard/);
   assert.match(rolesRoute, /companyKey/);
@@ -89,7 +94,7 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(dashboard, /confirmed 2027/);
   assert.match(dashboard, /summer2027Only/);
   assert.match(dashboard, /undergraduateOnly/);
-  assert.match(dashboard, /newTodayOnly/);
+  assert.match(dashboard, /newOnly/);
   assert.match(dashboard, /type="checkbox"/);
   assert.match(dashboard, /undergraduate/);
   assert.match(dashboard, /<span>new<\/span>/);
@@ -98,16 +103,10 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(dashboard, /function Pagination/);
   assert.match(dashboard, /aria-label="Pagination"/);
   assert.match(dashboard, /made by shlok\.fyi/);
-  assert.match(smsRoute, /hasOwnerSession/);
-  assert.match(smsRoute, /isSmsAlertEligible/);
-  assert.match(smsAlerts, /SCOUTER_SMS_ENABLED/);
-  assert.match(smsAlerts, /SCOUTER_TWILIO_ACCOUNT_SID/);
-  assert.match(smsAlerts, /SCOUTER_SMS_TO/);
-  assert.match(smsAlerts, /summer2027Confirmed/);
-  assert.match(smsAlerts, /undergraduateConfirmed/);
-  assert.match(smsAlerts, /isNewToday/);
-  assert.match(smsAlerts, /scouter —/);
-  assert.doesNotMatch(smsAlerts, /9253894997/);
+  assert.match(discoveryStore, /discovered_openings/);
+  assert.match(discoveryStore, /first_seen_at/);
+  assert.match(discoveryStore, /NEW_DISCOVERY_WINDOW_MS/);
+  assert.doesNotMatch(rolesRoute, /Twilio|SMS/);
   assert.match(auth, /SCOUTER_OWNER_PASSWORD/);
   assert.match(auth, /crypto\.subtle/);
   assert.doesNotMatch(auth, new RegExp("Demo" + "123"));

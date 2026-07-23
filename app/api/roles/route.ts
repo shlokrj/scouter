@@ -1,4 +1,6 @@
 import { watchlist } from "../../data/watchlist";
+import { greenhouseBoards, type GreenhouseBoard } from "../../data/official-ats";
+import { annotateDiscoveries } from "../../lib/discovery-store";
 import { hasOwnerSession } from "../../lib/owner-auth";
 
 type CompanyPriority = "all" | "top" | "faang";
@@ -12,7 +14,7 @@ type Opening = {
   priority: CompanyPriority;
   summer2027Confirmed: boolean;
   undergraduateConfirmed: boolean;
-  isNewToday: boolean;
+  isNew: boolean;
 };
 
 const feeds = {
@@ -84,26 +86,26 @@ function hasUndergraduateSignal(value: string) {
   return /\b(undergrad(?:uate)?|bachelor'?s?|bs|bsc)\b/i.test(value);
 }
 
-function inScope(position: string) {
+function isTechnicalRole(position: string) {
+  return /\b(?:software|swe|sde|developer|development|engineering?|technology|systems?\s+(?:analyst|engineer|administrator|developer)|data\s+(?:analyst|scientist|engineer)|machine\s+learning|artificial\s+intelligence|\bai\b|\bml\b|cyber(?:security)?|information\s+technology|\bit\b|cloud|infrastructure|devops|site\s+reliability|\bsre\b|network|database|technical(?:\s+(?:analyst|product|program)\s+manager)?|product\s+manager|hardware|firmware|embedded|quant(?:itative)?|analytics?|business\s+intelligence|quality\s+assurance|\bqa\b)\b/i.test(position);
+}
+
+function inScope(position: string, sourceIsSummer2027 = false) {
   const value = position.toLowerCase();
   const explicitlySummer2027 = /summer\s+2027/.test(value);
   const otherSeason = /\b(fall|winter|spring)\b/.test(value);
   const mixedYear = value.includes("2026") && !explicitlySummer2027;
   const nonSummerCoop = /\bco-?op\b/.test(value) && !explicitlySummer2027;
-  if ((otherSeason && !explicitlySummer2027) || mixedYear || nonSummerCoop) return false;
+  if ((otherSeason && !explicitlySummer2027) || mixedYear || nonSummerCoop || (!sourceIsSummer2027 && !explicitlySummer2027)) return false;
 
   const undergraduateSignal = hasUndergraduateSignal(position);
   const graduateOnlySignal = /\b(ph\.?d\.?|doctoral|doctorate|master'?s?|masters|ms|mba|graduate)\b/.test(value);
-  return !graduateOnlySignal || undergraduateSignal;
+  return (!graduateOnlySignal || undergraduateSignal) && isTechnicalRole(position);
 }
 
 function isSummer2027Confirmed(position: string, applyUrl: string) {
   const sourceSignal = `${position} ${decodeHtml(applyUrl)}`;
   return /\b(?:summer\s*[-–]?\s*2027|2027\s+summer)\b/i.test(sourceSignal);
-}
-
-function isNewToday(postedAt: string | null) {
-  return postedAt === new Date().toISOString().slice(0, 10);
 }
 
 function parseSndsh404(markdown: string): Opening[] {
@@ -116,7 +118,7 @@ function parseSndsh404(markdown: string): Opening[] {
 
     const company = canonicalCompanyName(cleanText(cells[0]));
     const position = cleanText(cells[1]);
-    if (!company || !position || !inScope(position)) return [];
+    if (!company || !position || !inScope(position, true)) return [];
     const postedAt = /^\d{4}-\d{2}-\d{2}$/.test(cells[4]) ? cells[4] : null;
 
     return [{
@@ -128,7 +130,7 @@ function parseSndsh404(markdown: string): Opening[] {
       priority: companyPriority(company),
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
       undergraduateConfirmed: hasUndergraduateSignal(position),
-      isNewToday: isNewToday(postedAt),
+      isNew: false,
     }];
   });
 }
@@ -167,7 +169,7 @@ function parseSpeedyapply(markdown: string): Opening[] {
     const applyCell = cells.find((cell) => cell.includes('alt="Apply"')) ?? "";
     const applyUrl = applyCell.match(/<a href="(https?:\/\/[^\"]+)"/i)?.[1];
     const postedAt = dateFromAge(cells.at(-1) ?? "");
-    if (!company || !position || !applyUrl || !inScope(position)) return [];
+    if (!company || !position || !applyUrl || !inScope(position, true)) return [];
 
     return [{
       id: applyUrl,
@@ -178,7 +180,7 @@ function parseSpeedyapply(markdown: string): Opening[] {
       priority: companyPriority(company),
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
       undergraduateConfirmed: hasUndergraduateSignal(position),
-      isNewToday: isNewToday(postedAt),
+      isNew: false,
     }];
   });
 }
@@ -198,7 +200,7 @@ function parseVanshb03(markdown: string): Opening[] {
     const position = cleanText(cells[1]);
     const applyUrl = linkFromCell(cells[3]);
     const postedAt = dateFromMonthDay(cleanText(cells[4]));
-    if (!company || !position || !applyUrl || !inScope(position)) return [];
+    if (!company || !position || !applyUrl || !inScope(position, true)) return [];
 
     return [{
       id: applyUrl,
@@ -209,7 +211,7 @@ function parseVanshb03(markdown: string): Opening[] {
       priority: companyPriority(company),
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
       undergraduateConfirmed: hasUndergraduateSignal(position),
-      isNewToday: isNewToday(postedAt),
+      isNew: false,
     }];
   });
 }
@@ -224,7 +226,7 @@ function parseChieler(markdown: string): Opening[] {
     const position = cleanText(cells[1]);
     const postedAt = /^\d{4}-\d{2}-\d{2}$/.test(cells[2]) ? cells[2] : null;
     const applyUrl = linkFromCell(cells[4]);
-    if (!company || !position || !postedAt || !applyUrl || !inScope(position)) return [];
+    if (!company || !position || !postedAt || !applyUrl || !inScope(position, true)) return [];
 
     return [{
       id: applyUrl,
@@ -235,7 +237,44 @@ function parseChieler(markdown: string): Opening[] {
       priority: companyPriority(company),
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
       undergraduateConfirmed: hasUndergraduateSignal(position),
-      isNewToday: isNewToday(postedAt),
+      isNew: false,
+    }];
+  });
+}
+
+type GreenhouseJob = {
+  absolute_url?: unknown;
+  first_published?: unknown;
+  title?: unknown;
+};
+
+function dateFromIso(value: unknown) {
+  if (typeof value !== "string" || Number.isNaN(Date.parse(value))) return null;
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+function parseGreenhouse(board: GreenhouseBoard, value: unknown): Opening[] {
+  const jobs = value && typeof value === "object" && Array.isArray((value as { jobs?: unknown }).jobs)
+    ? (value as { jobs: GreenhouseJob[] }).jobs
+    : [];
+  const company = canonicalCompanyName(board.company);
+
+  return jobs.flatMap((job) => {
+    const position = typeof job.title === "string" ? cleanText(job.title) : "";
+    const applyUrl = typeof job.absolute_url === "string" ? job.absolute_url : "";
+    if (!position || !applyUrl || !inScope(position)) return [];
+
+    const postedAt = dateFromIso(job.first_published);
+    return [{
+      id: applyUrl,
+      company,
+      position,
+      postedAt,
+      applyUrl,
+      priority: companyPriority(company),
+      summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
+      undergraduateConfirmed: hasUndergraduateSignal(position),
+      isNew: false,
     }];
   });
 }
@@ -344,8 +383,12 @@ function keepBestOpening(left: Opening, right: Opening) {
     postedAt: preferred.postedAt ?? alternate.postedAt,
     summer2027Confirmed: left.summer2027Confirmed || right.summer2027Confirmed,
     undergraduateConfirmed: left.undergraduateConfirmed || right.undergraduateConfirmed,
-    isNewToday: left.isNewToday || right.isNewToday,
+    isNew: left.isNew || right.isNew,
   };
+}
+
+function openingFingerprint(opening: Opening) {
+  return `${companyKey(opening.company)}:${roleTokens(opening.position).join("-")}`;
 }
 
 function dedupe(openings: Opening[]) {
@@ -379,23 +422,41 @@ async function fetchFeed(url: string) {
   return response.text();
 }
 
+async function fetchGreenhouse(board: GreenhouseBoard) {
+  const response = await fetch(`https://boards-api.greenhouse.io/v1/boards/${board.board}/jobs`, {
+    headers: {
+      accept: "application/json",
+      "user-agent": "Scouter/0.3 (+internship discovery)",
+    },
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!response.ok) throw new Error(`Greenhouse board returned ${response.status}`);
+  return parseGreenhouse(board, await response.json());
+}
+
 export async function GET() {
   if (!(await hasOwnerSession())) {
     return Response.json({ message: "Owner access required." }, { status: 401 });
   }
 
-  const settled = await Promise.allSettled([
+  const communitySettled = await Promise.allSettled([
     fetchFeed(feeds.sndsh404),
     fetchFeed(feeds.speedyapply),
     fetchFeed(feeds.vanshb03),
     fetchFeed(feeds.chieler),
   ]);
+  const greenhouseSettled = await Promise.allSettled(greenhouseBoards.map(fetchGreenhouse));
 
-  const sndshOpenings = settled[0].status === "fulfilled" ? parseSndsh404(settled[0].value) : [];
-  const speedyOpenings = settled[1].status === "fulfilled" ? parseSpeedyapply(settled[1].value) : [];
-  const vanshOpenings = settled[2].status === "fulfilled" ? parseVanshb03(settled[2].value) : [];
-  const chielerOpenings = settled[3].status === "fulfilled" ? parseChieler(settled[3].value) : [];
-  const openings = dedupe([...sndshOpenings, ...speedyOpenings, ...vanshOpenings, ...chielerOpenings]).sort((a, b) =>
+  const sndshOpenings = communitySettled[0].status === "fulfilled" ? parseSndsh404(communitySettled[0].value) : [];
+  const speedyOpenings = communitySettled[1].status === "fulfilled" ? parseSpeedyapply(communitySettled[1].value) : [];
+  const vanshOpenings = communitySettled[2].status === "fulfilled" ? parseVanshb03(communitySettled[2].value) : [];
+  const chielerOpenings = communitySettled[3].status === "fulfilled" ? parseChieler(communitySettled[3].value) : [];
+  const greenhouseOpenings = greenhouseSettled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+  const deduplicated = dedupe([...sndshOpenings, ...speedyOpenings, ...vanshOpenings, ...chielerOpenings, ...greenhouseOpenings]).map((opening) => ({
+    ...opening,
+    id: openingFingerprint(opening),
+  }));
+  const openings = (await annotateDiscoveries(deduplicated)).sort((a, b) =>
     (b.postedAt ?? "").localeCompare(a.postedAt ?? "")
       || a.company.localeCompare(b.company)
       || a.position.localeCompare(b.position),
@@ -404,7 +465,7 @@ export async function GET() {
   return Response.json({
     openings,
     checkedAt: new Date().toISOString(),
-    sourcesChecked: settled.filter((result) => result.status === "fulfilled").length,
-    sourceCount: settled.length,
+    sourcesChecked: [...communitySettled, ...greenhouseSettled].filter((result) => result.status === "fulfilled").length,
+    sourceCount: communitySettled.length + greenhouseSettled.length,
   }, { headers: { "cache-control": "no-store" } });
 }
