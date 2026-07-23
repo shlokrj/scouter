@@ -73,7 +73,7 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(rolesRoute, /hasUndergraduateSignal/);
   assert.match(rolesRoute, /summer2027Confirmed/);
   assert.match(rolesRoute, /undergraduateConfirmed/);
-  assert.match(rolesRoute, /isNewThisWeek/);
+  assert.match(rolesRoute, /isNewToday/);
   assert.match(rolesRoute, /companyAliases/);
   assert.match(rolesRoute, /hewlettpackard/);
   assert.match(rolesRoute, /companyKey/);
@@ -89,7 +89,7 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(dashboard, /confirmed 2027/);
   assert.match(dashboard, /summer2027Only/);
   assert.match(dashboard, /undergraduateOnly/);
-  assert.match(dashboard, /newThisWeekOnly/);
+  assert.match(dashboard, /newTodayOnly/);
   assert.match(dashboard, /type="checkbox"/);
   assert.match(dashboard, /undergraduate/);
   assert.match(dashboard, /<span>new<\/span>/);
@@ -105,7 +105,7 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(smsAlerts, /SCOUTER_SMS_TO/);
   assert.match(smsAlerts, /summer2027Confirmed/);
   assert.match(smsAlerts, /undergraduateConfirmed/);
-  assert.match(smsAlerts, /isNewThisWeek/);
+  assert.match(smsAlerts, /isNewToday/);
   assert.match(smsAlerts, /scouter —/);
   assert.doesNotMatch(smsAlerts, /9253894997/);
   assert.match(auth, /SCOUTER_OWNER_PASSWORD/);

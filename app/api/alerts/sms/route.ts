@@ -13,7 +13,7 @@ function readOpening(value: unknown): SmsOpening | null {
     || (priority !== "all" && priority !== "top" && priority !== "faang")
     || typeof opening.summer2027Confirmed !== "boolean"
     || typeof opening.undergraduateConfirmed !== "boolean"
-    || typeof opening.isNewThisWeek !== "boolean") {
+    || typeof opening.isNewToday !== "boolean") {
     return null;
   }
 
@@ -25,7 +25,7 @@ function readOpening(value: unknown): SmsOpening | null {
     priority,
     summer2027Confirmed: opening.summer2027Confirmed,
     undergraduateConfirmed: opening.undergraduateConfirmed,
-    isNewThisWeek: opening.isNewThisWeek,
+    isNewToday: opening.isNewToday,
   };
 }
 

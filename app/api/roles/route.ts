@@ -12,7 +12,7 @@ type Opening = {
   priority: CompanyPriority;
   summer2027Confirmed: boolean;
   undergraduateConfirmed: boolean;
-  isNewThisWeek: boolean;
+  isNewToday: boolean;
 };
 
 const feeds = {
@@ -102,13 +102,8 @@ function isSummer2027Confirmed(position: string, applyUrl: string) {
   return /\b(?:summer\s*[-–]?\s*2027|2027\s+summer)\b/i.test(sourceSignal);
 }
 
-function isNewThisWeek(postedAt: string | null) {
-  if (!postedAt) return false;
-  const posted = new Date(`${postedAt}T00:00:00Z`);
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
-  const ageInDays = Math.floor((today.getTime() - posted.getTime()) / (24 * 60 * 60 * 1000));
-  return ageInDays >= 0 && ageInDays < 7;
+function isNewToday(postedAt: string | null) {
+  return postedAt === new Date().toISOString().slice(0, 10);
 }
 
 function parseSndsh404(markdown: string): Opening[] {
@@ -133,7 +128,7 @@ function parseSndsh404(markdown: string): Opening[] {
       priority: companyPriority(company),
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
       undergraduateConfirmed: hasUndergraduateSignal(position),
-      isNewThisWeek: isNewThisWeek(postedAt),
+      isNewToday: isNewToday(postedAt),
     }];
   });
 }
@@ -183,7 +178,7 @@ function parseSpeedyapply(markdown: string): Opening[] {
       priority: companyPriority(company),
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
       undergraduateConfirmed: hasUndergraduateSignal(position),
-      isNewThisWeek: isNewThisWeek(postedAt),
+      isNewToday: isNewToday(postedAt),
     }];
   });
 }
@@ -214,7 +209,7 @@ function parseVanshb03(markdown: string): Opening[] {
       priority: companyPriority(company),
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
       undergraduateConfirmed: hasUndergraduateSignal(position),
-      isNewThisWeek: isNewThisWeek(postedAt),
+      isNewToday: isNewToday(postedAt),
     }];
   });
 }
@@ -240,7 +235,7 @@ function parseChieler(markdown: string): Opening[] {
       priority: companyPriority(company),
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
       undergraduateConfirmed: hasUndergraduateSignal(position),
-      isNewThisWeek: isNewThisWeek(postedAt),
+      isNewToday: isNewToday(postedAt),
     }];
   });
 }
@@ -349,7 +344,7 @@ function keepBestOpening(left: Opening, right: Opening) {
     postedAt: preferred.postedAt ?? alternate.postedAt,
     summer2027Confirmed: left.summer2027Confirmed || right.summer2027Confirmed,
     undergraduateConfirmed: left.undergraduateConfirmed || right.undergraduateConfirmed,
-    isNewThisWeek: left.isNewThisWeek || right.isNewThisWeek,
+    isNewToday: left.isNewToday || right.isNewToday,
   };
 }
 

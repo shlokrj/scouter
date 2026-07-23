@@ -8,7 +8,7 @@ export type SmsOpening = {
   priority: AlertPriority;
   summer2027Confirmed: boolean;
   undergraduateConfirmed: boolean;
-  isNewThisWeek: boolean;
+  isNewToday: boolean;
 };
 
 type SmsSettings = {
@@ -39,7 +39,7 @@ export function isSmsAlertEligible(opening: SmsOpening) {
   return (opening.priority === "top" || opening.priority === "faang")
     && opening.summer2027Confirmed
     && opening.undergraduateConfirmed
-    && opening.isNewThisWeek;
+    && opening.isNewToday;
 }
 
 export function smsAlertText(opening: SmsOpening) {
