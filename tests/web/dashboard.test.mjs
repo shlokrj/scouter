@@ -36,13 +36,14 @@ test("server-renders the owner password screen", async () => {
 });
 
 test("keeps the product metadata and deployment setup explicit", async () => {
-  const [layout, page, dashboard, rolesRoute, companyIdentities, discoveryStore, auth, loginRoute, icon, gitignore, license, readme, packageJson, vercelConfig, viteConfig] = await Promise.all([
+  const [layout, page, dashboard, rolesRoute, companyIdentities, discoveryStore, roleScope, auth, loginRoute, icon, gitignore, license, readme, packageJson, vercelConfig, viteConfig] = await Promise.all([
     readFile(new URL("../../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/components/scouter-dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/api/roles/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/data/company-identities.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/lib/discovery-store.ts", import.meta.url), "utf8"),
+    readFile(new URL("../../app/lib/role-scope.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/lib/owner-auth.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/api/auth/login/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/icon.svg", import.meta.url), "utf8"),
@@ -70,13 +71,15 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(rolesRoute, /parseGreenhouse/);
   assert.match(rolesRoute, /fetchGreenhouse/);
   assert.match(rolesRoute, /greenhouseBoards/);
-  assert.match(rolesRoute, /isTechnicalRole/);
-  assert.match(rolesRoute, /systems\?\\s\+/);
+  assert.match(roleScope, /isTechnicalRole/);
+  assert.match(roleScope, /technicalOnly/);
+  assert.match(rolesRoute, /sourceIsSummer2027: true/);
+  assert.match(roleScope, /systems\?\\s\+/);
   assert.match(rolesRoute, /greenhouseOpenings/);
-  assert.match(rolesRoute, /graduateOnlySignal/);
-  assert.match(rolesRoute, /explicitlySummer2027/);
+  assert.match(roleScope, /graduateOnlySignal/);
+  assert.match(roleScope, /explicitlySummer2027/);
   assert.match(rolesRoute, /isSummer2027Confirmed/);
-  assert.match(rolesRoute, /hasUndergraduateSignal/);
+  assert.match(roleScope, /hasUndergraduateSignal/);
   assert.match(rolesRoute, /summer2027Confirmed/);
   assert.match(rolesRoute, /undergraduateConfirmed/);
   assert.match(rolesRoute, /annotateDiscoveries/);

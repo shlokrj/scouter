@@ -164,7 +164,7 @@ export function ScouterDashboard() {
               <h1>{view === "openings" ? "Internship openings" : "Companies"}</h1>
               <p>
                 {view === "openings"
-                  ? "Undergraduate software, data, machine learning, quantitative, hardware, and product roles."
+                  ? "Undergraduate Summer 2027 openings from the connected sources."
                   : "The complete company universe Scouter uses for discovery and future source coverage."}
               </p>
             </div>

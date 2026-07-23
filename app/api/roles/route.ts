@@ -3,6 +3,7 @@ import { canonicalCompanyName, companyKey } from "../../data/company-identities"
 import { greenhouseBoards, type GreenhouseBoard } from "../../data/official-ats";
 import { annotateDiscoveries } from "../../lib/discovery-store";
 import { hasOwnerSession } from "../../lib/owner-auth";
+import { hasUndergraduateSignal, inScope } from "../../lib/role-scope";
 
 type CompanyPriority = "all" | "top" | "faang";
 
@@ -83,27 +84,6 @@ function companyPriority(company: string): CompanyPriority {
   return "all";
 }
 
-function hasUndergraduateSignal(value: string) {
-  return /\b(undergrad(?:uate)?|bachelor'?s?|bs|bsc)\b/i.test(value);
-}
-
-function isTechnicalRole(position: string) {
-  return /\b(?:software|swe|sde|developer|development|engineering?|technology|systems?\s+(?:analyst|engineer|administrator|developer)|data\s+(?:analyst|scientist|engineer)|machine\s+learning|artificial\s+intelligence|\bai\b|\bml\b|cyber(?:security)?|information\s+technology|\bit\b|cloud|infrastructure|devops|site\s+reliability|\bsre\b|network|database|technical(?:\s+(?:analyst|product|program)\s+manager)?|product\s+manager|hardware|firmware|embedded|quant(?:itative)?|analytics?|business\s+intelligence|quality\s+assurance|\bqa\b)\b/i.test(position);
-}
-
-function inScope(position: string, sourceIsSummer2027 = false) {
-  const value = position.toLowerCase();
-  const explicitlySummer2027 = /summer\s+2027/.test(value);
-  const otherSeason = /\b(fall|winter|spring)\b/.test(value);
-  const mixedYear = value.includes("2026") && !explicitlySummer2027;
-  const nonSummerCoop = /\bco-?op\b/.test(value) && !explicitlySummer2027;
-  if ((otherSeason && !explicitlySummer2027) || mixedYear || nonSummerCoop || (!sourceIsSummer2027 && !explicitlySummer2027)) return false;
-
-  const undergraduateSignal = hasUndergraduateSignal(position);
-  const graduateOnlySignal = /\b(ph\.?d\.?|doctoral|doctorate|master'?s?|masters|ms|mba|graduate)\b/.test(value);
-  return (!graduateOnlySignal || undergraduateSignal) && isTechnicalRole(position);
-}
-
 function isSummer2027Confirmed(position: string, applyUrl: string) {
   const sourceSignal = `${position} ${decodeHtml(applyUrl)}`;
   return /\b(?:summer\s*[-–]?\s*2027|2027\s+summer)\b/i.test(sourceSignal);
@@ -119,7 +99,7 @@ function parseSndsh404(markdown: string): Opening[] {
 
     const company = canonicalCompanyName(cleanText(cells[0]));
     const position = cleanText(cells[1]);
-    if (!company || !position || !inScope(position, true)) return [];
+    if (!company || !position || !inScope(position, { sourceIsSummer2027: true })) return [];
     const postedAt = /^\d{4}-\d{2}-\d{2}$/.test(cells[4]) ? cells[4] : null;
 
     return [{
@@ -170,7 +150,7 @@ function parseSpeedyapply(markdown: string): Opening[] {
     const applyCell = cells.find((cell) => cell.includes('alt="Apply"')) ?? "";
     const applyUrl = applyCell.match(/<a href="(https?:\/\/[^\"]+)"/i)?.[1];
     const postedAt = dateFromAge(cells.at(-1) ?? "");
-    if (!company || !position || !applyUrl || !inScope(position, true)) return [];
+    if (!company || !position || !applyUrl || !inScope(position, { sourceIsSummer2027: true })) return [];
 
     return [{
       id: applyUrl,
@@ -201,7 +181,7 @@ function parseVanshb03(markdown: string): Opening[] {
     const position = cleanText(cells[1]);
     const applyUrl = linkFromCell(cells[3]);
     const postedAt = dateFromMonthDay(cleanText(cells[4]));
-    if (!company || !position || !applyUrl || !inScope(position, true)) return [];
+    if (!company || !position || !applyUrl || !inScope(position, { sourceIsSummer2027: true })) return [];
 
     return [{
       id: applyUrl,
@@ -227,7 +207,7 @@ function parseChieler(markdown: string): Opening[] {
     const position = cleanText(cells[1]);
     const postedAt = /^\d{4}-\d{2}-\d{2}$/.test(cells[2]) ? cells[2] : null;
     const applyUrl = linkFromCell(cells[4]);
-    if (!company || !position || !postedAt || !applyUrl || !inScope(position, true)) return [];
+    if (!company || !position || !postedAt || !applyUrl || !inScope(position, { sourceIsSummer2027: true })) return [];
 
     return [{
       id: applyUrl,
@@ -263,7 +243,7 @@ function parseGreenhouse(board: GreenhouseBoard, value: unknown): Opening[] {
   return jobs.flatMap((job) => {
     const position = typeof job.title === "string" ? cleanText(job.title) : "";
     const applyUrl = typeof job.absolute_url === "string" ? job.absolute_url : "";
-    if (!position || !applyUrl || !inScope(position)) return [];
+    if (!position || !applyUrl || !inScope(position, { technicalOnly: true })) return [];
 
     const postedAt = dateFromIso(job.first_published);
     return [{
