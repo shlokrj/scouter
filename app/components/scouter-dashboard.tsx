@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { watchlist } from "../data/watchlist";
+import { companyDirectory, companyMatchesSearch } from "../data/company-identities";
 
 type View = "openings" | "companies";
 type CompanyPriority = "all" | "top" | "faang";
@@ -111,7 +111,9 @@ export function ScouterDashboard() {
   const openings = useMemo(() => {
     const term = query.trim().toLowerCase();
     return (payload?.openings ?? []).filter((opening) => {
-      const matchesQuery = !term || `${opening.company} ${opening.position}`.toLowerCase().includes(term);
+      const matchesQuery = !term
+        || companyMatchesSearch(opening.company, term)
+        || opening.position.toLowerCase().includes(term);
       return matchesQuery
         && matchesPriority(opening.priority, priorityLevel)
         && (!summer2027Only || opening.summer2027Confirmed)
@@ -122,8 +124,11 @@ export function ScouterDashboard() {
 
   const companies = useMemo(() => {
     const term = query.trim().toLowerCase();
-    return watchlist.filter((company) =>
-      !term || `${company.name} ${company.category} ${company.cohort}`.toLowerCase().includes(term),
+    return companyDirectory.filter((company) =>
+      !term
+      || companyMatchesSearch(company.name, term)
+      || company.aliases.some((alias) => companyMatchesSearch(alias, term))
+      || `${company.category} ${company.cohort}`.toLowerCase().includes(term),
     );
   }, [query]);
 
@@ -154,7 +159,7 @@ export function ScouterDashboard() {
           <div className="page-header">
             <div>
               <p className="eyebrow">
-                {view === "openings" ? "undergraduate · united states · summer 2027" : `${watchlist.length} companies · fortune 500 + targets`}
+                {view === "openings" ? "undergraduate · united states · summer 2027" : `${companyDirectory.length} companies · fortune 500 + targets`}
               </p>
               <h1>{view === "openings" ? "Internship openings" : "Companies"}</h1>
               <p>
@@ -334,7 +339,7 @@ function OpeningsFeed({ openings, total, currentPage, pageCount, onPageChange, p
 }
 
 function CompaniesFeed({ companies, total, currentPage, pageCount, onPageChange, filtered }: {
-  companies: typeof watchlist;
+  companies: typeof companyDirectory;
   total: number;
   currentPage: number;
   pageCount: number;
@@ -350,7 +355,7 @@ function CompaniesFeed({ companies, total, currentPage, pageCount, onPageChange,
         </div>
         <span className="result-note">
           {total ? `${(currentPage - 1) * PAGE_SIZE + 1}–${Math.min(currentPage * PAGE_SIZE, total)} of ${total}` : "0 of 0"}
-          {filtered && ` · filtered from ${watchlist.length}`}
+          {filtered && ` · filtered from ${companyDirectory.length}`}
         </span>
       </div>
 

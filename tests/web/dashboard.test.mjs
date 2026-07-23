@@ -36,11 +36,12 @@ test("server-renders the owner password screen", async () => {
 });
 
 test("keeps the product metadata and deployment setup explicit", async () => {
-  const [layout, page, dashboard, rolesRoute, discoveryStore, auth, loginRoute, icon, gitignore, license, readme, packageJson, vercelConfig] = await Promise.all([
+  const [layout, page, dashboard, rolesRoute, companyIdentities, discoveryStore, auth, loginRoute, icon, gitignore, license, readme, packageJson, vercelConfig] = await Promise.all([
     readFile(new URL("../../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/components/scouter-dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/api/roles/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../../app/data/company-identities.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/lib/discovery-store.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/lib/owner-auth.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/api/auth/login/route.ts", import.meta.url), "utf8"),
@@ -79,8 +80,13 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(rolesRoute, /undergraduateConfirmed/);
   assert.match(rolesRoute, /annotateDiscoveries/);
   assert.match(rolesRoute, /openingFingerprint/);
-  assert.match(rolesRoute, /companyAliases/);
-  assert.match(rolesRoute, /hewlettpackard/);
+  assert.match(rolesRoute, /company-identities/);
+  assert.match(companyIdentities, /Google/);
+  assert.match(companyIdentities, /Alphabet/);
+  assert.match(companyIdentities, /Hewlett Packard/);
+  assert.match(companyIdentities, /companyMatchesSearch/);
+  assert.match(dashboard, /companyMatchesSearch/);
+  assert.match(companyIdentities, /Hewlett Packard/);
   assert.match(rolesRoute, /companyKey/);
   assert.match(rolesRoute, /canonicalCompanyName/);
   assert.match(rolesRoute, /roleTokens/);
@@ -88,7 +94,7 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(rolesRoute, /keepBestOpening/);
   assert.match(rolesRoute, /companyPriority/);
   assert.match(dashboard, /type="range"/);
-  assert.match(dashboard, /watchlist/);
+  assert.match(dashboard, /companyDirectory/);
   assert.match(dashboard, /href="\/login"/);
   assert.match(dashboard, /last refresh/);
   assert.match(dashboard, /confirmed 2027/);

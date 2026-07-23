@@ -1,4 +1,5 @@
 import { watchlist } from "../../data/watchlist";
+import { canonicalCompanyName, companyKey } from "../../data/company-identities";
 import { greenhouseBoards, type GreenhouseBoard } from "../../data/official-ats";
 import { annotateDiscoveries } from "../../lib/discovery-store";
 import { hasOwnerSession } from "../../lib/owner-auth";
@@ -70,9 +71,9 @@ const topCompanies = new Set([
   "jumptrading", "linkedin", "lyft", "mongodb", "notion", "openai", "optiver", "palantir",
   "pinterest", "plaid", "ramp", "reddit", "rippling", "roblox", "salesforce", "samsara",
   "snowflake", "spacex", "stripe", "tesla", "tiktok", "twosigma", "uber", "waymo", "xai",
-].map(normalize));
+].map(companyKey));
 
-const watchlistRanks = new Map(watchlist.map((company) => [normalize(company.name), company.rank]));
+const watchlistRanks = new Map(watchlist.map((company) => [companyKey(company.name), company.rank]));
 
 function companyPriority(company: string): CompanyPriority {
   const name = companyKey(company);
@@ -279,50 +280,6 @@ function parseGreenhouse(board: GreenhouseBoard, value: unknown): Opening[] {
   });
 }
 
-function normalize(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-const companyAliases = new Map([
-  ["alphabet", "google"],
-  ["amazonwebservices", "amazon"],
-  ["bytedanceltd", "bytedance"],
-  ["facebook", "meta"],
-  ["googlellc", "google"],
-  ["hewlettpackardhp", "hp"],
-  ["hewlettpackard", "hp"],
-  ["hewlettpackardenterprise", "hpe"],
-  ["jpmc", "jpmorgan"],
-  ["jpmorganchase", "jpmorgan"],
-  ["metaplatforms", "meta"],
-  ["microsoftcorporation", "microsoft"],
-  ["nvidiacorporation", "nvidia"],
-  ["twosigma", "twosigma"],
-  ["twosigmainvestments", "twosigma"],
-].map(([alias, canonical]) => [alias, canonical]));
-
-function companyKey(value: string) {
-  const key = normalize(
-    value
-      .replace(/\s*\([^)]*\)/g, "")
-      .replace(/\b(?:incorporated|inc|llc|ltd|limited|corp|corporation|company|co)\b/gi, ""),
-  );
-  return companyAliases.get(key) ?? key;
-}
-
-const canonicalCompanyNames = new Map<string, string>();
-
-for (const company of watchlist) {
-  const key = companyKey(company.name);
-  if (!canonicalCompanyNames.has(key)) {
-    canonicalCompanyNames.set(key, company.name);
-  }
-}
-
-function canonicalCompanyName(value: string) {
-  return canonicalCompanyNames.get(companyKey(value)) ?? value;
-}
-
 function roleTokens(position: string) {
   const role = decodeHtml(position)
     .toLowerCase()
@@ -349,7 +306,7 @@ function roleTokens(position: string) {
 function isSameRole(left: string, right: string) {
   const leftTokens = roleTokens(left);
   const rightTokens = roleTokens(right);
-  if (!leftTokens.length || !rightTokens.length) return normalize(left) === normalize(right);
+  if (!leftTokens.length || !rightTokens.length) return left.toLowerCase() === right.toLowerCase();
   if (leftTokens.join(":") === rightTokens.join(":")) return true;
 
   const rightSet = new Set(rightTokens);
