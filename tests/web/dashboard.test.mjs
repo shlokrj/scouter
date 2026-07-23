@@ -36,7 +36,7 @@ test("server-renders the owner password screen", async () => {
 });
 
 test("keeps the product metadata and deployment setup explicit", async () => {
-  const [layout, page, dashboard, rolesRoute, companyIdentities, discoveryStore, auth, loginRoute, icon, gitignore, license, readme, packageJson, vercelConfig] = await Promise.all([
+  const [layout, page, dashboard, rolesRoute, companyIdentities, discoveryStore, auth, loginRoute, icon, gitignore, license, readme, packageJson, vercelConfig, viteConfig] = await Promise.all([
     readFile(new URL("../../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/components/scouter-dashboard.tsx", import.meta.url), "utf8"),
@@ -51,6 +51,7 @@ test("keeps the product metadata and deployment setup explicit", async () => {
     readFile(new URL("../../README.md", import.meta.url), "utf8"),
     readFile(new URL("../../package.json", import.meta.url), "utf8"),
     readFile(new URL("../../vercel.json", import.meta.url), "utf8"),
+    readFile(new URL("../../vite.config.ts", import.meta.url), "utf8"),
   ]);
 
   assert.match(layout, /title: "scouter"/);
@@ -132,5 +133,7 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(packageJson, /"build:cloudflare": "WRANGLER_LOG_PATH=.*vinext build"/);
   assert.match(vercelConfig, /"framework": "nextjs"/);
   assert.match(vercelConfig, /"outputDirectory": "\.next"/);
+  assert.match(viteConfig, /discoveryDatabaseBinding = "DB"/);
+  assert.doesNotMatch(viteConfig, /\.openai\/hosting\.json/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 });

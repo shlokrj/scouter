@@ -1,21 +1,19 @@
 import vinext from "vinext";
 import { defineConfig } from "vite";
-import hostingConfig from "./.openai/hosting.json";
 import { sites } from "./scripts/sites-vite-plugin";
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
+const discoveryDatabaseBinding = "DB";
 
 const localBindingConfig = {
   main: "./worker/index.ts",
   compatibility_flags: ["nodejs_compat"],
-  d1_databases: hostingConfig.d1
-    ? [{
-      binding: hostingConfig.d1,
-      database_name: "scouter-discovery",
-      database_id: "00000000-0000-4000-8000-000000000000",
-    }]
-    : [],
+  d1_databases: [{
+    binding: discoveryDatabaseBinding,
+    database_name: "scouter-discovery",
+    database_id: "00000000-0000-4000-8000-000000000000",
+  }],
 };
 
 export default defineConfig(async () => {
