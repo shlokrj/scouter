@@ -12,6 +12,7 @@ type Opening = {
   priority: CompanyPriority;
   summer2027Confirmed: boolean;
   undergraduateConfirmed: boolean;
+  isNewThisWeek: boolean;
 };
 
 const feeds = {
@@ -72,7 +73,7 @@ const topCompanies = new Set([
 const watchlistRanks = new Map(watchlist.map((company) => [normalize(company.name), company.rank]));
 
 function companyPriority(company: string): CompanyPriority {
-  const name = normalize(company);
+  const name = companyKey(company);
   if (faangPlus.has(name)) return "faang";
   const rank = watchlistRanks.get(name);
   if (topCompanies.has(name) || (rank !== null && rank !== undefined && rank <= 100)) return "top";
@@ -101,6 +102,15 @@ function isSummer2027Confirmed(position: string, applyUrl: string) {
   return /\b(?:summer\s*[-–]?\s*2027|2027\s+summer)\b/i.test(sourceSignal);
 }
 
+function isNewThisWeek(postedAt: string | null) {
+  if (!postedAt) return false;
+  const posted = new Date(`${postedAt}T00:00:00Z`);
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const ageInDays = Math.floor((today.getTime() - posted.getTime()) / (24 * 60 * 60 * 1000));
+  return ageInDays >= 0 && ageInDays < 7;
+}
+
 function parseSndsh404(markdown: string): Opening[] {
   return markdown.split("\n").flatMap((line) => {
     if (!line.startsWith("|") || line.includes("| ---") || line.includes("~~")) return [];
@@ -109,7 +119,7 @@ function parseSndsh404(markdown: string): Opening[] {
     const applyUrl = cells[3].match(/\[[^\]]+\]\((https?:\/\/[^)]+)\)/)?.[1];
     if (!applyUrl) return [];
 
-    const company = cleanText(cells[0]);
+    const company = canonicalCompanyName(cleanText(cells[0]));
     const position = cleanText(cells[1]);
     if (!company || !position || !inScope(position)) return [];
     const postedAt = /^\d{4}-\d{2}-\d{2}$/.test(cells[4]) ? cells[4] : null;
@@ -123,6 +133,7 @@ function parseSndsh404(markdown: string): Opening[] {
       priority: companyPriority(company),
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
       undergraduateConfirmed: hasUndergraduateSignal(position),
+      isNewThisWeek: isNewThisWeek(postedAt),
     }];
   });
 }
@@ -156,7 +167,7 @@ function parseSpeedyapply(markdown: string): Opening[] {
   return markdown.split("\n").flatMap((line) => {
     if (!line.startsWith("|") || !line.includes('alt="Apply"')) return [];
     const cells = rowCells(line);
-    const company = cleanText(cells[0] ?? "");
+    const company = canonicalCompanyName(cleanText(cells[0] ?? ""));
     const position = cleanText(cells[1] ?? "");
     const applyCell = cells.find((cell) => cell.includes('alt="Apply"')) ?? "";
     const applyUrl = applyCell.match(/<a href="(https?:\/\/[^\"]+)"/i)?.[1];
@@ -172,6 +183,7 @@ function parseSpeedyapply(markdown: string): Opening[] {
       priority: companyPriority(company),
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
       undergraduateConfirmed: hasUndergraduateSignal(position),
+      isNewThisWeek: isNewThisWeek(postedAt),
     }];
   });
 }
@@ -185,7 +197,7 @@ function parseVanshb03(markdown: string): Opening[] {
     if (cells.length !== 5 || cells[0] === "Company") return [];
 
     const listedCompany = cleanText(cells[0]);
-    const company = listedCompany === "↳" ? previousCompany : listedCompany;
+    const company = listedCompany === "↳" ? previousCompany : canonicalCompanyName(listedCompany);
     if (listedCompany && listedCompany !== "↳") previousCompany = listedCompany;
 
     const position = cleanText(cells[1]);
@@ -202,6 +214,7 @@ function parseVanshb03(markdown: string): Opening[] {
       priority: companyPriority(company),
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
       undergraduateConfirmed: hasUndergraduateSignal(position),
+      isNewThisWeek: isNewThisWeek(postedAt),
     }];
   });
 }
@@ -212,7 +225,7 @@ function parseChieler(markdown: string): Opening[] {
     const cells = rowCells(line);
     if (cells.length !== 5 || cells[0] === "Company") return [];
 
-    const company = cleanText(cells[0]);
+    const company = canonicalCompanyName(cleanText(cells[0]));
     const position = cleanText(cells[1]);
     const postedAt = /^\d{4}-\d{2}-\d{2}$/.test(cells[2]) ? cells[2] : null;
     const applyUrl = linkFromCell(cells[4]);
@@ -227,6 +240,7 @@ function parseChieler(markdown: string): Opening[] {
       priority: companyPriority(company),
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
       undergraduateConfirmed: hasUndergraduateSignal(position),
+      isNewThisWeek: isNewThisWeek(postedAt),
     }];
   });
 }
@@ -235,20 +249,67 @@ function normalize(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+const companyAliases = new Map([
+  ["alphabet", "google"],
+  ["amazonwebservices", "amazon"],
+  ["bytedanceltd", "bytedance"],
+  ["facebook", "meta"],
+  ["googlellc", "google"],
+  ["hewlettpackardhp", "hp"],
+  ["hewlettpackard", "hp"],
+  ["hewlettpackardenterprise", "hpe"],
+  ["jpmc", "jpmorgan"],
+  ["jpmorganchase", "jpmorgan"],
+  ["metaplatforms", "meta"],
+  ["microsoftcorporation", "microsoft"],
+  ["nvidiacorporation", "nvidia"],
+  ["twosigma", "twosigma"],
+  ["twosigmainvestments", "twosigma"],
+].map(([alias, canonical]) => [alias, canonical]));
+
 function companyKey(value: string) {
-  return normalize(value.replace(/\b(?:incorporated|inc|llc|ltd|limited|corp|corporation|company|co)\b/gi, ""));
+  const key = normalize(
+    value
+      .replace(/\s*\([^)]*\)/g, "")
+      .replace(/\b(?:incorporated|inc|llc|ltd|limited|corp|corporation|company|co)\b/gi, ""),
+  );
+  return companyAliases.get(key) ?? key;
+}
+
+const canonicalCompanyNames = new Map<string, string>();
+
+for (const company of watchlist) {
+  const key = companyKey(company.name);
+  if (!canonicalCompanyNames.has(key)) {
+    canonicalCompanyNames.set(key, company.name);
+  }
+}
+
+function canonicalCompanyName(value: string) {
+  return canonicalCompanyNames.get(companyKey(value)) ?? value;
 }
 
 function roleTokens(position: string) {
   const role = decodeHtml(position)
     .toLowerCase()
-    .replace(/\bswe\b/g, "software engineer")
+    .replace(/\b(?:swe|sde)\b/g, "software engineer")
     .replace(/\bsoftware\s+(?:developer|development|engineering|engineer)\b/g, "software engineer")
+    .replace(/\b(?:machine\s+learning|ml)\b/g, "machinelearning")
+    .replace(/\bdata\s+science\b/g, "datascience")
+    .replace(/\b(?:artificial\s+intelligence|ai)\b/g, "artificialintelligence")
+    .replace(/\b(?:product\s+management?|pm)\b/g, "productmanager")
+    .replace(/\bfront[\s-]?end\b/g, "frontend")
+    .replace(/\bback[\s-]?end\b/g, "backend")
+    .replace(/\bfull[\s-]?stack\b/g, "fullstack")
     .replace(/\b(?:developer|development|engineering)\b/g, "engineer")
     .replace(/[–—/,&()[\]-]/g, " ")
     .replace(/\b(?:internships?|intern|summer|fall|winter|spring|20\d{2}|undergrad(?:uate)?|bachelor'?s?|bsc|b\s*\.?\s*s\.?)\b/g, " ");
 
-  return [...new Set(role.match(/[a-z0-9]+/g) ?? [])].sort();
+  return [...new Set((role.match(/[a-z0-9]+/g) ?? []).map((token) => {
+    if (token.length > 3 && token.endsWith("ies")) return `${token.slice(0, -3)}y`;
+    if (token.length > 3 && token.endsWith("s")) return token.slice(0, -1);
+    return token;
+  }))].sort();
 }
 
 function isSameRole(left: string, right: string) {
@@ -259,7 +320,9 @@ function isSameRole(left: string, right: string) {
 
   const rightSet = new Set(rightTokens);
   const common = leftTokens.filter((token) => rightSet.has(token)).length;
-  return common >= 2 && common / Math.max(leftTokens.length, rightTokens.length) >= 0.8;
+  return common >= 2
+    && common / Math.max(leftTokens.length, rightTokens.length) >= 0.8
+    && common / Math.min(leftTokens.length, rightTokens.length) >= 0.9;
 }
 
 function canonicalUrl(value: string) {
@@ -286,6 +349,7 @@ function keepBestOpening(left: Opening, right: Opening) {
     postedAt: preferred.postedAt ?? alternate.postedAt,
     summer2027Confirmed: left.summer2027Confirmed || right.summer2027Confirmed,
     undergraduateConfirmed: left.undergraduateConfirmed || right.undergraduateConfirmed,
+    isNewThisWeek: left.isNewThisWeek || right.isNewThisWeek,
   };
 }
 

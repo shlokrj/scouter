@@ -16,6 +16,7 @@ type Opening = {
   priority: CompanyPriority;
   summer2027Confirmed: boolean;
   undergraduateConfirmed: boolean;
+  isNewThisWeek: boolean;
 };
 
 type OpeningsPayload = {
@@ -82,6 +83,7 @@ export function ScouterDashboard() {
   const [priorityLevel, setPriorityLevel] = useState(0);
   const [summer2027Only, setSummer2027Only] = useState(false);
   const [undergraduateOnly, setUndergraduateOnly] = useState(false);
+  const [newThisWeekOnly, setNewThisWeekOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [payload, setPayload] = useState<OpeningsPayload | null>(null);
   const [refreshing, setRefreshing] = useState(true);
@@ -113,9 +115,10 @@ export function ScouterDashboard() {
       return matchesQuery
         && matchesPriority(opening.priority, priorityLevel)
         && (!summer2027Only || opening.summer2027Confirmed)
-        && (!undergraduateOnly || opening.undergraduateConfirmed);
+        && (!undergraduateOnly || opening.undergraduateConfirmed)
+        && (!newThisWeekOnly || opening.isNewThisWeek);
     });
-  }, [payload, priorityLevel, query, summer2027Only, undergraduateOnly]);
+  }, [newThisWeekOnly, payload, priorityLevel, query, summer2027Only, undergraduateOnly]);
 
   const companies = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -219,6 +222,11 @@ export function ScouterDashboard() {
                     <span className="toggle-track" aria-hidden="true" />
                     <span>undergraduate</span>
                   </label>
+                  <label className={`confirmed-toggle ${newThisWeekOnly ? "active" : ""}`}>
+                    <input type="checkbox" checked={newThisWeekOnly} onChange={(event) => { setNewThisWeekOnly(event.target.checked); setPage(1); }} />
+                    <span className="toggle-track" aria-hidden="true" />
+                    <span>new</span>
+                  </label>
                 </div>
               </div>
             )}
@@ -234,7 +242,7 @@ export function ScouterDashboard() {
               payload={payload}
               refreshing={refreshing}
               error={error}
-              filtered={Boolean(query) || priorityLevel > 0 || summer2027Only || undergraduateOnly}
+              filtered={Boolean(query) || priorityLevel > 0 || summer2027Only || undergraduateOnly || newThisWeekOnly}
             />
           ) : (
             <CompaniesFeed
@@ -300,13 +308,14 @@ function OpeningsFeed({ openings, total, currentPage, pageCount, onPageChange, p
           <span>company</span><span>position</span><span>date posted</span><span>application</span>
         </div>
         {openings.map((opening, index) => (
-          <article className={`opening-row row-enter ${opening.summer2027Confirmed || opening.undergraduateConfirmed ? "summer-confirmed" : ""}`} style={{ animationDelay: `${Math.min(index, 14) * 18}ms` }} key={opening.id}>
+          <article className={`opening-row row-enter ${opening.summer2027Confirmed || opening.undergraduateConfirmed || opening.isNewThisWeek ? "summer-confirmed" : ""}`} style={{ animationDelay: `${Math.min(index, 14) * 18}ms` }} key={opening.id}>
             <strong data-label="company">
               {opening.company}
-              {(opening.summer2027Confirmed || opening.undergraduateConfirmed) && (
+              {(opening.summer2027Confirmed || opening.undergraduateConfirmed || opening.isNewThisWeek) && (
                 <span className="confirmation-marks">
                   {opening.summer2027Confirmed && <span className="confirmed-mark" title="The source explicitly identifies this opening as Summer 2027">confirmed 2027</span>}
                   {opening.undergraduateConfirmed && <span className="confirmed-mark" title="The source explicitly identifies undergraduate eligibility">undergraduate</span>}
+                  {opening.isNewThisWeek && <span className="new-mark" title="The source reports this opening within the last seven days">new</span>}
                 </span>
               )}
             </strong>

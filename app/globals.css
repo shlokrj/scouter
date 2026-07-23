@@ -451,6 +451,13 @@ input:focus-visible {
   letter-spacing: .015em;
 }
 
+.new-mark {
+  color: #ff9aa2;
+  font: 8px var(--font-space-mono), monospace;
+  font-weight: 400;
+  letter-spacing: .015em;
+}
+
 .confirmation-marks {
   display: flex;
   flex-wrap: wrap;
