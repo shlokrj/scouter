@@ -36,13 +36,15 @@ test("server-renders the owner password screen", async () => {
 });
 
 test("keeps the product metadata and deployment setup explicit", async () => {
-  const [layout, page, dashboard, rolesRoute, companyIdentities, discoveryStore, roleScope, auth, loginRoute, icon, gitignore, license, readme, packageJson, vercelConfig, viteConfig] = await Promise.all([
+  const [layout, page, dashboard, rolesRoute, companyIdentities, discoveryStore, clientDiscovery, openingOrder, roleScope, auth, loginRoute, icon, gitignore, license, readme, packageJson, vercelConfig, viteConfig] = await Promise.all([
     readFile(new URL("../../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/components/scouter-dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/api/roles/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/data/company-identities.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/lib/discovery-store.ts", import.meta.url), "utf8"),
+    readFile(new URL("../../app/lib/client-discovery.ts", import.meta.url), "utf8"),
+    readFile(new URL("../../app/lib/opening-order.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/lib/role-scope.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/lib/owner-auth.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/api/auth/login/route.ts", import.meta.url), "utf8"),
@@ -61,13 +63,16 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(layout, /metadataBase/);
   assert.match(page, /hasOwnerSession/);
   assert.match(page, /redirect\("\/login"\)/);
-  assert.doesNotMatch(dashboard, /localStorage|ApplicationStatus|status-select/);
+  assert.doesNotMatch(dashboard, /ApplicationStatus|status-select/);
   assert.match(rolesRoute, /sndsh404\/summer-2027-internships/);
   assert.match(rolesRoute, /speedyapply\/2027-SWE-College-Jobs/);
+  assert.match(rolesRoute, /speedyapply\/2027-AI-College-Jobs/);
+  assert.match(rolesRoute, /zshah101\/Automated-List-Of-Summer-2027/);
   assert.match(rolesRoute, /vanshb03\/Summer2027-Internships/);
   assert.match(rolesRoute, /Chieler\/Summer-2027-SWE-Internships/);
   assert.match(rolesRoute, /parseVanshb03/);
   assert.match(rolesRoute, /parseChieler/);
+  assert.match(rolesRoute, /parseZshah101/);
   assert.match(rolesRoute, /parseGreenhouse/);
   assert.match(rolesRoute, /fetchGreenhouse/);
   assert.match(rolesRoute, /greenhouseBoards/);
@@ -84,6 +89,7 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(rolesRoute, /undergraduateConfirmed/);
   assert.match(rolesRoute, /annotateDiscoveries/);
   assert.match(rolesRoute, /openingFingerprint/);
+  assert.match(rolesRoute, /orderOpeningsByDiscovery/);
   assert.match(rolesRoute, /company-identities/);
   assert.match(companyIdentities, /Google/);
   assert.match(companyIdentities, /Alphabet/);
@@ -116,6 +122,10 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(discoveryStore, /discovered_openings/);
   assert.match(discoveryStore, /first_seen_at/);
   assert.match(discoveryStore, /NEW_DISCOVERY_WINDOW_MS/);
+  assert.match(discoveryStore, /discoveredAt/);
+  assert.match(clientDiscovery, /scouter\.opening-discoveries\.v1/);
+  assert.match(dashboard, /window\.localStorage/);
+  assert.match(openingOrder, /Number\(right\.isNew\) - Number\(left\.isNew\)/);
   assert.doesNotMatch(rolesRoute, /Twilio|SMS/);
   assert.match(auth, /SCOUTER_OWNER_PASSWORD/);
   assert.match(auth, /crypto\.subtle/);

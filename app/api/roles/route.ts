@@ -2,6 +2,7 @@ import { watchlist } from "../../data/watchlist";
 import { canonicalCompanyName, companyKey } from "../../data/company-identities";
 import { greenhouseBoards, type GreenhouseBoard } from "../../data/official-ats";
 import { annotateDiscoveries } from "../../lib/discovery-store";
+import { orderOpeningsByDiscovery } from "../../lib/opening-order";
 import { hasOwnerSession } from "../../lib/owner-auth";
 import { hasUndergraduateSignal, inScope } from "../../lib/role-scope";
 
@@ -17,13 +18,16 @@ type Opening = {
   summer2027Confirmed: boolean;
   undergraduateConfirmed: boolean;
   isNew: boolean;
+  discoveredAt: string;
 };
 
 const feeds = {
   sndsh404: "https://raw.githubusercontent.com/sndsh404/summer-2027-internships/main/README.md",
   speedyapply: "https://raw.githubusercontent.com/speedyapply/2027-SWE-College-Jobs/main/README.md",
+  speedyapplyAi: "https://raw.githubusercontent.com/speedyapply/2027-AI-College-Jobs/main/README.md",
   vanshb03: "https://raw.githubusercontent.com/vanshb03/Summer2027-Internships/dev/README.md",
   chieler: "https://raw.githubusercontent.com/Chieler/Summer-2027-SWE-Internships/main/README.md",
+  zshah101: "https://raw.githubusercontent.com/zshah101/Automated-List-Of-Summer-2027-and-Fall-2026-Tech-Internships/main/README.md",
 };
 
 function decodeHtml(value: string) {
@@ -46,7 +50,7 @@ function cleanText(value: string) {
   return decodeHtml(value)
     .replace(/<[^>]+>/g, "")
     .replace(/\*\*|~~/g, "")
-    .replace(/[🛂🔒]/gu, "")
+    .replace(/[✅✓🆕🏠🛂🔒]/gu, "")
     .replace(/\p{Regional_Indicator}{2}/gu, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -112,6 +116,7 @@ function parseSndsh404(markdown: string): Opening[] {
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
       undergraduateConfirmed: hasUndergraduateSignal(position),
       isNew: false,
+      discoveredAt: "",
     }];
   });
 }
@@ -141,7 +146,7 @@ function dateFromMonthDay(value: string) {
   return new Date(Date.UTC(year, month, Number(match[2]))).toISOString().slice(0, 10);
 }
 
-function parseSpeedyapply(markdown: string): Opening[] {
+export function parseSpeedyapply(markdown: string): Opening[] {
   return markdown.split("\n").flatMap((line) => {
     if (!line.startsWith("|") || !line.includes('alt="Apply"')) return [];
     const cells = rowCells(line);
@@ -162,6 +167,7 @@ function parseSpeedyapply(markdown: string): Opening[] {
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
       undergraduateConfirmed: hasUndergraduateSignal(position),
       isNew: false,
+      discoveredAt: "",
     }];
   });
 }
@@ -193,6 +199,7 @@ function parseVanshb03(markdown: string): Opening[] {
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
       undergraduateConfirmed: hasUndergraduateSignal(position),
       isNew: false,
+      discoveredAt: "",
     }];
   });
 }
@@ -219,6 +226,38 @@ function parseChieler(markdown: string): Opening[] {
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
       undergraduateConfirmed: hasUndergraduateSignal(position),
       isNew: false,
+      discoveredAt: "",
+    }];
+  });
+}
+
+function dateFromLongDate(value: string) {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString().slice(0, 10) : null;
+}
+
+export function parseZshah101(markdown: string): Opening[] {
+  return markdown.split("\n").flatMap((line) => {
+    if (!line.startsWith("|") || line.includes("| ---")) return [];
+    const cells = rowCells(line);
+    if (cells.length !== 6 || cells[0] === "Company") return [];
+
+    const company = canonicalCompanyName(cleanText(cells[0]));
+    const position = cleanText(cells[1]);
+    const applyUrl = linkFromCell(cells[5]);
+    if (!company || !position || !applyUrl || !inScope(position, { sourceIsSummer2027: true })) return [];
+
+    return [{
+      id: applyUrl,
+      company,
+      position,
+      postedAt: dateFromLongDate(cleanText(cells[4])),
+      applyUrl: decodeHtml(applyUrl),
+      priority: companyPriority(company),
+      summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
+      undergraduateConfirmed: hasUndergraduateSignal(position),
+      isNew: false,
+      discoveredAt: "",
     }];
   });
 }
@@ -256,6 +295,7 @@ function parseGreenhouse(board: GreenhouseBoard, value: unknown): Opening[] {
       summer2027Confirmed: isSummer2027Confirmed(position, applyUrl),
       undergraduateConfirmed: hasUndergraduateSignal(position),
       isNew: false,
+      discoveredAt: "",
     }];
   });
 }
@@ -328,7 +368,7 @@ function openingFingerprint(opening: Opening) {
   return `${companyKey(opening.company)}:${roleTokens(opening.position).join("-")}`;
 }
 
-function dedupe(openings: Opening[]) {
+export function dedupe(openings: Opening[]) {
   const unique: Opening[] = [];
 
   for (const opening of openings) {
@@ -379,25 +419,33 @@ export async function GET() {
   const communitySettled = await Promise.allSettled([
     fetchFeed(feeds.sndsh404),
     fetchFeed(feeds.speedyapply),
+    fetchFeed(feeds.speedyapplyAi),
     fetchFeed(feeds.vanshb03),
     fetchFeed(feeds.chieler),
+    fetchFeed(feeds.zshah101),
   ]);
   const greenhouseSettled = await Promise.allSettled(greenhouseBoards.map(fetchGreenhouse));
 
   const sndshOpenings = communitySettled[0].status === "fulfilled" ? parseSndsh404(communitySettled[0].value) : [];
   const speedyOpenings = communitySettled[1].status === "fulfilled" ? parseSpeedyapply(communitySettled[1].value) : [];
-  const vanshOpenings = communitySettled[2].status === "fulfilled" ? parseVanshb03(communitySettled[2].value) : [];
-  const chielerOpenings = communitySettled[3].status === "fulfilled" ? parseChieler(communitySettled[3].value) : [];
+  const speedyAiOpenings = communitySettled[2].status === "fulfilled" ? parseSpeedyapply(communitySettled[2].value) : [];
+  const vanshOpenings = communitySettled[3].status === "fulfilled" ? parseVanshb03(communitySettled[3].value) : [];
+  const chielerOpenings = communitySettled[4].status === "fulfilled" ? parseChieler(communitySettled[4].value) : [];
+  const zshahOpenings = communitySettled[5].status === "fulfilled" ? parseZshah101(communitySettled[5].value) : [];
   const greenhouseOpenings = greenhouseSettled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
-  const deduplicated = dedupe([...sndshOpenings, ...speedyOpenings, ...vanshOpenings, ...chielerOpenings, ...greenhouseOpenings]).map((opening) => ({
+  const deduplicated = dedupe([
+    ...sndshOpenings,
+    ...speedyOpenings,
+    ...speedyAiOpenings,
+    ...vanshOpenings,
+    ...chielerOpenings,
+    ...zshahOpenings,
+    ...greenhouseOpenings,
+  ]).map((opening) => ({
     ...opening,
     id: openingFingerprint(opening),
   }));
-  const openings = (await annotateDiscoveries(deduplicated)).sort((a, b) =>
-    (b.postedAt ?? "").localeCompare(a.postedAt ?? "")
-      || a.company.localeCompare(b.company)
-      || a.position.localeCompare(b.position),
-  );
+  const openings = orderOpeningsByDiscovery(await annotateDiscoveries(deduplicated));
 
   return Response.json({
     openings,

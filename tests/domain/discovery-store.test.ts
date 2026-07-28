@@ -72,6 +72,7 @@ test("marks only openings discovered after the baseline as new", async () => {
     { id: "company:software-engineer", company: "Company", position: "Software Engineer Intern", applyUrl: "https://example.com/a" },
   ]);
   assert.equal(baseline[0].isNew, false);
+  assert.match(baseline[0].discoveredAt, /^\d{4}-\d{2}-\d{2}T/);
 
   const nextScan = await annotateDiscoveries([
     { id: "company:software-engineer", company: "Company", position: "Software Engineer Intern", applyUrl: "https://example.com/a" },
@@ -79,4 +80,5 @@ test("marks only openings discovered after the baseline as new", async () => {
   ]);
   assert.equal(nextScan[0].isNew, false);
   assert.equal(nextScan[1].isNew, true);
+  assert.equal(nextScan[0].discoveredAt, baseline[0].discoveredAt);
 });

@@ -48,6 +48,7 @@ function annotateMemory<T extends DiscoveryOpening>(openings: T[], timestamp: st
 
   return openings.map((opening) => ({
     ...opening,
+    discoveredAt: memoryFirstSeen.get(opening.id)?.firstSeenAt ?? timestamp,
     isNew: !isBaseline
       && !memoryFirstSeen.get(opening.id)?.isBaseline
       && discoveredRecently(memoryFirstSeen.get(opening.id)?.firstSeenAt ?? timestamp, now),
@@ -87,6 +88,7 @@ export async function annotateDiscoveries<T extends DiscoveryOpening>(openings: 
     const now = Date.parse(timestamp);
     return openings.map((opening) => ({
       ...opening,
+      discoveredAt: existingByFingerprint.get(opening.id)?.first_seen_at ?? timestamp,
       isNew: !isBaseline
         && existingByFingerprint.get(opening.id)?.is_baseline !== 1
         && discoveredRecently(existingByFingerprint.get(opening.id)?.first_seen_at ?? timestamp, now),

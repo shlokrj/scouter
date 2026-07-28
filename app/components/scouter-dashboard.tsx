@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { companyDirectory, companyMatchesSearch } from "../data/company-identities";
+import { annotateClientDiscoveries } from "../lib/client-discovery";
+import { orderOpeningsByDiscovery } from "../lib/opening-order";
 
 type View = "openings" | "companies";
 type CompanyPriority = "all" | "top" | "faang";
@@ -17,6 +19,7 @@ type Opening = {
   summer2027Confirmed: boolean;
   undergraduateConfirmed: boolean;
   isNew: boolean;
+  discoveredAt: string;
 };
 
 type OpeningsPayload = {
@@ -95,7 +98,11 @@ export function ScouterDashboard() {
     try {
       const response = await fetch("/api/roles", { cache: "no-store" });
       if (!response.ok) throw new Error("opening refresh failed");
-      setPayload(await response.json() as OpeningsPayload);
+      const nextPayload = await response.json() as OpeningsPayload;
+      setPayload({
+        ...nextPayload,
+        openings: orderOpeningsByDiscovery(annotateClientDiscoveries(nextPayload.openings, window.localStorage)),
+      });
     } catch {
       setError(true);
     } finally {
@@ -269,9 +276,13 @@ export function ScouterDashboard() {
           <span aria-hidden="true"> + </span>
           <a href="https://github.com/speedyapply/2027-SWE-College-Jobs" target="_blank" rel="noreferrer">speedyapply</a>
           <span aria-hidden="true"> + </span>
+          <a href="https://github.com/speedyapply/2027-AI-College-Jobs" target="_blank" rel="noreferrer">speedyapply ai</a>
+          <span aria-hidden="true"> + </span>
           <a href="https://github.com/vanshb03/Summer2027-Internships" target="_blank" rel="noreferrer">vanshb03</a>
           <span aria-hidden="true"> + </span>
           <a href="https://github.com/Chieler/Summer-2027-SWE-Internships" target="_blank" rel="noreferrer">chieler</a>
+          <span aria-hidden="true"> + </span>
+          <a href="https://github.com/zshah101/Automated-List-Of-Summer-2027-and-Fall-2026-Tech-Internships" target="_blank" rel="noreferrer">zshah101</a>
         </span>
       </footer>
     </div>
