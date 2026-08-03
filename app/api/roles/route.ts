@@ -2,6 +2,8 @@ import { watchlist } from "../../data/watchlist";
 import { canonicalCompanyName, companyKey } from "../../data/company-identities";
 import { greenhouseBoards, type GreenhouseBoard } from "../../data/official-ats";
 import { annotateDiscoveries } from "../../lib/discovery-store";
+import { manualDuplicateUrls, withoutManualDuplicates } from "../../lib/manual-duplicate-store";
+import { canonicalApplicationUrl, isSameRole, roleTokens } from "../../lib/opening-dedupe";
 import { orderOpeningsByDiscovery } from "../../lib/opening-order";
 import { hasOwnerSession } from "../../lib/owner-auth";
 import { hasUndergraduateSignal, inScope } from "../../lib/role-scope";
@@ -300,51 +302,6 @@ function parseGreenhouse(board: GreenhouseBoard, value: unknown): Opening[] {
   });
 }
 
-function roleTokens(position: string) {
-  const role = decodeHtml(position)
-    .toLowerCase()
-    .replace(/\b(?:swe|sde)\b/g, "software engineer")
-    .replace(/\bsoftware\s+(?:developer|development|engineering|engineer)\b/g, "software engineer")
-    .replace(/\b(?:machine\s+learning|ml)\b/g, "machinelearning")
-    .replace(/\bdata\s+science\b/g, "datascience")
-    .replace(/\b(?:artificial\s+intelligence|ai)\b/g, "artificialintelligence")
-    .replace(/\b(?:product\s+management?|pm)\b/g, "productmanager")
-    .replace(/\bfront[\s-]?end\b/g, "frontend")
-    .replace(/\bback[\s-]?end\b/g, "backend")
-    .replace(/\bfull[\s-]?stack\b/g, "fullstack")
-    .replace(/\b(?:developer|development|engineering)\b/g, "engineer")
-    .replace(/[–—/,&()[\]-]/g, " ")
-    .replace(/\b(?:internships?|intern|summer|fall|winter|spring|20\d{2}|undergrad(?:uate)?|bachelor'?s?|bsc|b\s*\.?\s*s\.?)\b/g, " ");
-
-  return [...new Set((role.match(/[a-z0-9]+/g) ?? []).map((token) => {
-    if (token.length > 3 && token.endsWith("ies")) return `${token.slice(0, -3)}y`;
-    if (token.length > 3 && token.endsWith("s")) return token.slice(0, -1);
-    return token;
-  }))].sort();
-}
-
-function isSameRole(left: string, right: string) {
-  const leftTokens = roleTokens(left);
-  const rightTokens = roleTokens(right);
-  if (!leftTokens.length || !rightTokens.length) return left.toLowerCase() === right.toLowerCase();
-  if (leftTokens.join(":") === rightTokens.join(":")) return true;
-
-  const rightSet = new Set(rightTokens);
-  const common = leftTokens.filter((token) => rightSet.has(token)).length;
-  return common >= 2
-    && common / Math.max(leftTokens.length, rightTokens.length) >= 0.8
-    && common / Math.min(leftTokens.length, rightTokens.length) >= 0.9;
-}
-
-function canonicalUrl(value: string) {
-  try {
-    const url = new URL(value);
-    return `${url.hostname.replace(/^www\./, "")}${url.pathname.replace(/\/$/, "")}`.toLowerCase();
-  } catch {
-    return value.toLowerCase();
-  }
-}
-
 function openingQuality(opening: Opening) {
   return (opening.summer2027Confirmed ? 100 : 0)
     + (opening.undergraduateConfirmed ? 10 : 0)
@@ -370,11 +327,12 @@ function openingFingerprint(opening: Opening) {
 
 export function dedupe(openings: Opening[]) {
   const unique: Opening[] = [];
+  const indexesByUrl = new Map<string, number>();
 
   for (const opening of openings) {
-    const duplicateIndex = unique.findIndex((existing) =>
-      canonicalUrl(existing.applyUrl) === canonicalUrl(opening.applyUrl)
-      || (companyKey(existing.company) === companyKey(opening.company) && isSameRole(existing.position, opening.position)),
+    const canonicalUrl = canonicalApplicationUrl(opening.applyUrl);
+    const duplicateIndex = indexesByUrl.get(canonicalUrl) ?? unique.findIndex((existing) =>
+      companyKey(existing.company) === companyKey(opening.company) && isSameRole(existing.position, opening.position),
     );
 
     if (duplicateIndex === -1) {
@@ -382,6 +340,10 @@ export function dedupe(openings: Opening[]) {
     } else {
       unique[duplicateIndex] = keepBestOpening(unique[duplicateIndex], opening);
     }
+
+    const index = duplicateIndex === -1 ? unique.length - 1 : duplicateIndex;
+    indexesByUrl.set(canonicalUrl, index);
+    indexesByUrl.set(canonicalApplicationUrl(unique[index].applyUrl), index);
   }
 
   return unique;
@@ -445,7 +407,9 @@ export async function GET() {
     ...opening,
     id: openingFingerprint(opening),
   }));
-  const openings = orderOpeningsByDiscovery(await annotateDiscoveries(deduplicated));
+  const openings = orderOpeningsByDiscovery(await annotateDiscoveries(
+    withoutManualDuplicates(deduplicated, await manualDuplicateUrls()),
+  ));
 
   return Response.json({
     openings,

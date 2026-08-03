@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { companyDirectory, companyMatchesSearch } from "../data/company-identities";
 import { annotateClientDiscoveries } from "../lib/client-discovery";
+import { filterClientDuplicates, markClientDuplicate, removeClientDuplicate } from "../lib/client-duplicate-overrides";
 import { orderOpeningsByDiscovery } from "../lib/opening-order";
 
 type View = "openings" | "companies";
@@ -91,6 +92,8 @@ export function ScouterDashboard() {
   const [payload, setPayload] = useState<OpeningsPayload | null>(null);
   const [refreshing, setRefreshing] = useState(true);
   const [error, setError] = useState(false);
+  const [markedDuplicate, setMarkedDuplicate] = useState<Opening | null>(null);
+  const [markingDuplicateId, setMarkingDuplicateId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -101,7 +104,10 @@ export function ScouterDashboard() {
       const nextPayload = await response.json() as OpeningsPayload;
       setPayload({
         ...nextPayload,
-        openings: orderOpeningsByDiscovery(annotateClientDiscoveries(nextPayload.openings, window.localStorage)),
+        openings: orderOpeningsByDiscovery(filterClientDuplicates(
+          annotateClientDiscoveries(nextPayload.openings, window.localStorage),
+          window.localStorage,
+        )),
       });
     } catch {
       setError(true);
@@ -114,6 +120,47 @@ export function ScouterDashboard() {
     const start = window.setTimeout(() => void refresh(), 0);
     return () => window.clearTimeout(start);
   }, [refresh]);
+
+  const markDuplicate = useCallback(async (opening: Opening) => {
+    setMarkingDuplicateId(opening.id);
+    markClientDuplicate(opening.applyUrl, window.localStorage);
+    setPayload((current) => current && {
+      ...current,
+      openings: filterClientDuplicates(current.openings, window.localStorage),
+    });
+    setMarkedDuplicate(opening);
+
+    try {
+      await fetch("/api/duplicates", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ applyUrl: opening.applyUrl }),
+      });
+    } catch {
+      // The owner browser retains this duplicate rule when the server is unavailable.
+    } finally {
+      setMarkingDuplicateId(null);
+    }
+  }, []);
+
+  const restoreDuplicate = useCallback(async () => {
+    if (!markedDuplicate) return;
+    const opening = markedDuplicate;
+    setMarkedDuplicate(null);
+
+    try {
+      const response = await fetch("/api/duplicates", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ applyUrl: opening.applyUrl }),
+      });
+      if (response.ok) removeClientDuplicate(opening.applyUrl, window.localStorage);
+    } catch {
+      // Keep the local rule until the owner can successfully undo it.
+    } finally {
+      void refresh();
+    }
+  }, [markedDuplicate, refresh]);
 
   const openings = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -255,6 +302,10 @@ export function ScouterDashboard() {
               refreshing={refreshing}
               error={error}
               filtered={Boolean(query) || priorityLevel > 0 || summer2027Only || undergraduateOnly || newOnly}
+              markedDuplicate={markedDuplicate}
+              markingDuplicateId={markingDuplicateId}
+              onMarkDuplicate={markDuplicate}
+              onRestoreDuplicate={restoreDuplicate}
             />
           ) : (
             <CompaniesFeed
@@ -289,7 +340,7 @@ export function ScouterDashboard() {
   );
 }
 
-function OpeningsFeed({ openings, total, currentPage, pageCount, onPageChange, payload, refreshing, error, filtered }: {
+function OpeningsFeed({ openings, total, currentPage, pageCount, onPageChange, payload, refreshing, error, filtered, markedDuplicate, markingDuplicateId, onMarkDuplicate, onRestoreDuplicate }: {
   openings: Opening[];
   total: number;
   currentPage: number;
@@ -299,6 +350,10 @@ function OpeningsFeed({ openings, total, currentPage, pageCount, onPageChange, p
   refreshing: boolean;
   error: boolean;
   filtered: boolean;
+  markedDuplicate: Opening | null;
+  markingDuplicateId: string | null;
+  onMarkDuplicate: (opening: Opening) => void;
+  onRestoreDuplicate: () => void;
 }) {
   return (
     <section className="feed" aria-labelledby="feed-heading">
@@ -312,6 +367,11 @@ function OpeningsFeed({ openings, total, currentPage, pageCount, onPageChange, p
                 ? "The opening feeds are unavailable. Try refresh."
                 : `${total} positions · ${payload?.sourcesChecked ?? 0}/${payload?.sourceCount ?? 0} sources · updated ${payload ? formatTime(payload.checkedAt) : "now"}`}
           </p>
+          {markedDuplicate && (
+            <p className="duplicate-notice" role="status">
+              duplicate hidden <button type="button" onClick={onRestoreDuplicate}>undo</button>
+            </p>
+          )}
         </div>
         <span className="result-note">
           {total ? `${(currentPage - 1) * PAGE_SIZE + 1}–${Math.min(currentPage * PAGE_SIZE, total)} of ${total}` : "0 of 0"}
@@ -337,9 +397,19 @@ function OpeningsFeed({ openings, total, currentPage, pageCount, onPageChange, p
             </strong>
             <h3 data-label="position">{opening.position}</h3>
             <time className="mono-data" data-label="date posted" dateTime={opening.postedAt ?? undefined}>{formatDate(opening.postedAt)}</time>
-            <a href={opening.applyUrl} target="_blank" rel="noreferrer" aria-label={`Apply to ${opening.position} at ${opening.company}`}>
-              apply <span aria-hidden="true">↗</span>
-            </a>
+            <div className="opening-actions" data-label="application">
+              <a href={opening.applyUrl} target="_blank" rel="noreferrer" aria-label={`Apply to ${opening.position} at ${opening.company}`}>
+                apply <span aria-hidden="true">↗</span>
+              </a>
+              <button
+                type="button"
+                onClick={() => onMarkDuplicate(opening)}
+                disabled={markingDuplicateId === opening.id}
+                aria-label={`Mark ${opening.position} at ${opening.company} as a duplicate`}
+              >
+                {markingDuplicateId === opening.id ? "hiding" : "duplicate"}
+              </button>
+            </div>
           </article>
         ))}
         {!refreshing && openings.length === 0 && <p className="empty-message">No positions match these filters.</p>}

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { dedupe, parseSpeedyapply, parseZshah101 } from "../../app/api/roles/route";
+import { canonicalApplicationUrl, withoutManualDuplicates } from "../../app/lib/opening-dedupe";
 
 test("keeps eligible Summer 2027 AI roles from the SpeedyApply feed", () => {
   const openings = parseSpeedyapply(`
@@ -37,4 +38,29 @@ test("merges the same normalized role from overlapping sources", () => {
     { ...opening, id: "https://example.com/google-b", applyUrl: "https://example.com/google-b", position: "Software Engineer Intern, Summer 2027" },
   ]);
   assert.equal(merged.length, 1);
+});
+
+test("merges direct application links while retaining identity query parameters", () => {
+  const [opening] = parseZshah101(`
+| Company | Role | Category | Location | Posted | Apply |
+| --- | --- | --- | --- | --- | --- |
+| Example | Software Engineering Intern - Summer 2027 | Software | Remote | Jul 24, 2026 | [Apply](https://jobs.example.com/apply?job=17&utm_source=tracker) |
+`);
+  const merged = dedupe([
+    opening,
+    { ...opening, id: "https://jobs.example.com/apply?job=17&source=second-source", position: "Product Management Intern - Summer 2027", applyUrl: "https://jobs.example.com/apply?source=second-source&job=17" },
+  ]);
+
+  assert.equal(merged.length, 1);
+  assert.equal(canonicalApplicationUrl("https://jobs.example.com/apply?job=17&utm_source=tracker"), "jobs.example.com/apply?job=17");
+  assert.notEqual(canonicalApplicationUrl("https://jobs.example.com/apply?job=17"), canonicalApplicationUrl("https://jobs.example.com/apply?job=18"));
+});
+
+test("suppresses only manual duplicate application links", () => {
+  const openings = withoutManualDuplicates([
+    { applyUrl: "https://jobs.example.com/apply?job=17&utm_source=tracker", label: "hidden" },
+    { applyUrl: "https://jobs.example.com/apply?job=18", label: "visible" },
+  ], new Set(["jobs.example.com/apply?job=17"]));
+
+  assert.deepEqual(openings.map((opening) => opening.label), ["visible"]);
 });

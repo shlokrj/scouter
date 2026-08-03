@@ -36,14 +36,18 @@ test("server-renders the owner password screen", async () => {
 });
 
 test("keeps the product metadata and deployment setup explicit", async () => {
-  const [layout, page, dashboard, rolesRoute, companyIdentities, discoveryStore, clientDiscovery, openingOrder, roleScope, auth, loginRoute, icon, gitignore, license, readme, packageJson, vercelConfig, viteConfig] = await Promise.all([
+  const [layout, page, dashboard, rolesRoute, duplicatesRoute, companyIdentities, discoveryStore, clientDiscovery, clientDuplicates, manualDuplicates, openingDedupe, openingOrder, roleScope, auth, loginRoute, icon, gitignore, license, readme, packageJson, vercelConfig, viteConfig] = await Promise.all([
     readFile(new URL("../../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/components/scouter-dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/api/roles/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../../app/api/duplicates/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/data/company-identities.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/lib/discovery-store.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/lib/client-discovery.ts", import.meta.url), "utf8"),
+    readFile(new URL("../../app/lib/client-duplicate-overrides.ts", import.meta.url), "utf8"),
+    readFile(new URL("../../app/lib/manual-duplicate-store.ts", import.meta.url), "utf8"),
+    readFile(new URL("../../app/lib/opening-dedupe.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/lib/opening-order.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/lib/role-scope.ts", import.meta.url), "utf8"),
     readFile(new URL("../../app/lib/owner-auth.ts", import.meta.url), "utf8"),
@@ -90,6 +94,8 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(rolesRoute, /annotateDiscoveries/);
   assert.match(rolesRoute, /openingFingerprint/);
   assert.match(rolesRoute, /orderOpeningsByDiscovery/);
+  assert.match(rolesRoute, /manualDuplicateUrls/);
+  assert.match(rolesRoute, /withoutManualDuplicates/);
   assert.match(rolesRoute, /company-identities/);
   assert.match(companyIdentities, /Google/);
   assert.match(companyIdentities, /Alphabet/);
@@ -125,6 +131,16 @@ test("keeps the product metadata and deployment setup explicit", async () => {
   assert.match(discoveryStore, /discoveredAt/);
   assert.match(clientDiscovery, /scouter\.opening-discoveries\.v1/);
   assert.match(dashboard, /window\.localStorage/);
+  assert.match(dashboard, /Mark .* as a duplicate/);
+  assert.match(dashboard, /duplicate hidden/);
+  assert.match(dashboard, /\/api\/duplicates/);
+  assert.match(duplicatesRoute, /hasOwnerSession/);
+  assert.match(duplicatesRoute, /markManualDuplicate/);
+  assert.match(duplicatesRoute, /removeManualDuplicate/);
+  assert.match(clientDuplicates, /scouter\.manual-duplicates\.v1/);
+  assert.match(manualDuplicates, /manual_duplicate_overrides/);
+  assert.match(openingDedupe, /canonicalApplicationUrl/);
+  assert.match(openingDedupe, /utm_/);
   assert.match(openingOrder, /Number\(right\.isNew\) - Number\(left\.isNew\)/);
   assert.doesNotMatch(rolesRoute, /Twilio|SMS/);
   assert.match(auth, /SCOUTER_OWNER_PASSWORD/);

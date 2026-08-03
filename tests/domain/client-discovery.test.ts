@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { annotateClientDiscoveries } from "../../app/lib/client-discovery";
+import { filterClientDuplicates, markClientDuplicate, removeClientDuplicate } from "../../app/lib/client-duplicate-overrides";
 import { orderOpeningsByDiscovery } from "../../app/lib/opening-order";
 
 class MemoryStorage {
@@ -37,4 +38,19 @@ test("marks newly fetched client openings and places them before older postings"
 
   assert.equal(next.find((item) => item.id === "backdated-new")?.isNew, true);
   assert.equal(ordered[0].id, "backdated-new");
+});
+
+test("keeps a manual duplicate suppression across browser refreshes", () => {
+  const storage = new MemoryStorage();
+  markClientDuplicate("https://jobs.example.com/apply?job=17&utm_source=scouter", storage);
+
+  const openings = [
+    { applyUrl: "https://jobs.example.com/apply?job=17", label: "duplicate" },
+    { applyUrl: "https://jobs.example.com/apply?job=18", label: "keep" },
+  ];
+  const filtered = filterClientDuplicates(openings, storage);
+  assert.deepEqual(filtered.map((opening) => opening.label), ["keep"]);
+
+  removeClientDuplicate("https://jobs.example.com/apply?job=17", storage);
+  assert.equal(filterClientDuplicates(openings, storage).length, 2);
 });

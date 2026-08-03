@@ -13,3 +13,9 @@ export const discoveredOpenings = sqliteTable(
   },
   (table) => [index("discovered_openings_last_seen_idx").on(table.lastSeenAt)],
 );
+
+export const manualDuplicateOverrides = sqliteTable("manual_duplicate_overrides", {
+  canonicalUrl: text("canonical_url").primaryKey(),
+  applyUrl: text("apply_url").notNull(),
+  markedAt: text("marked_at").notNull(),
+});
