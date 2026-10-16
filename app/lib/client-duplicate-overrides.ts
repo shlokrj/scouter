@@ -4,7 +4,7 @@ type DuplicateStorage = Pick<Storage, "getItem" | "setItem">;
 
 const STORAGE_KEY = "scouter.manual-duplicates.v1";
 
-function duplicateUrls(storage: DuplicateStorage) {
+export function duplicateUrls(storage: DuplicateStorage) {
   try {
     const stored = storage.getItem(STORAGE_KEY);
     const values = stored ? JSON.parse(stored) : [];
@@ -34,6 +34,8 @@ export function markClientDuplicate(applyUrl: string, storage: DuplicateStorage)
 
 export function removeClientDuplicate(applyUrl: string, storage: DuplicateStorage) {
   const urls = duplicateUrls(storage);
-  urls.delete(canonicalApplicationUrl(applyUrl));
+  for (const url of urls) {
+    if (canonicalApplicationUrl(`https://${url}`) === canonicalApplicationUrl(applyUrl)) urls.delete(url);
+  }
   saveDuplicateUrls(storage, urls);
 }

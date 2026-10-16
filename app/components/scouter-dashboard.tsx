@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { companyDirectory, companyMatchesSearch } from "../data/company-identities";
 import { annotateClientDiscoveries } from "../lib/client-discovery";
-import { filterClientDuplicates, markClientDuplicate, removeClientDuplicate } from "../lib/client-duplicate-overrides";
+import { duplicateUrls, filterClientDuplicates, markClientDuplicate, removeClientDuplicate } from "../lib/client-duplicate-overrides";
+import { canonicalApplicationUrl } from "../lib/opening-dedupe";
 import { orderOpeningsByDiscovery } from "../lib/opening-order";
+import { type CoopTerm } from "../lib/coop-scope";
 
-type View = "openings" | "companies";
+type View = "openings" | "coops" | "companies";
 type CompanyPriority = "all" | "top" | "faang";
 
 type Opening = {
@@ -21,10 +23,13 @@ type Opening = {
   undergraduateConfirmed: boolean;
   isNew: boolean;
   discoveredAt: string;
+  terms?: CoopTerm[];
+  location?: string;
 };
 
 type OpeningsPayload = {
   openings: Opening[];
+  coops: Opening[];
   checkedAt: string;
   sourcesChecked: number;
   sourceCount: number;
@@ -88,12 +93,15 @@ export function ScouterDashboard() {
   const [summer2027Only, setSummer2027Only] = useState(false);
   const [undergraduateOnly, setUndergraduateOnly] = useState(false);
   const [newOnly, setNewOnly] = useState(false);
+  const [coopTerm, setCoopTerm] = useState<CoopTerm | "all">("all");
   const [page, setPage] = useState(1);
   const [payload, setPayload] = useState<OpeningsPayload | null>(null);
   const [refreshing, setRefreshing] = useState(true);
   const [error, setError] = useState(false);
   const [markedDuplicate, setMarkedDuplicate] = useState<Opening | null>(null);
   const [markingDuplicateId, setMarkingDuplicateId] = useState<string | null>(null);
+  const [hiddenDuplicates, setHiddenDuplicates] = useState<string[]>([]);
+  const [duplicateMessage, setDuplicateMessage] = useState("");
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -102,13 +110,19 @@ export function ScouterDashboard() {
       const response = await fetch("/api/roles", { cache: "no-store" });
       if (!response.ok) throw new Error("opening refresh failed");
       const nextPayload = await response.json() as OpeningsPayload;
+      // Annotate both collections together so a tab switch cannot reset the baseline.
+      const annotated = orderOpeningsByDiscovery(filterClientDuplicates(
+        annotateClientDiscoveries([...nextPayload.openings, ...(nextPayload.coops ?? [])], window.localStorage),
+        window.localStorage,
+      ));
       setPayload({
         ...nextPayload,
-        openings: orderOpeningsByDiscovery(filterClientDuplicates(
-          annotateClientDiscoveries(nextPayload.openings, window.localStorage),
-          window.localStorage,
-        )),
+        openings: annotated.filter((opening) => !opening.terms?.length),
+        coops: annotated.filter((opening) => opening.terms?.length),
       });
+      const duplicatesResponse = await fetch("/api/duplicates", { cache: "no-store" }).catch(() => null);
+      const saved = duplicatesResponse?.ok ? await duplicatesResponse.json() as { urls: string[] } : { urls: [] };
+      setHiddenDuplicates([...new Set([...saved.urls, ...duplicateUrls(window.localStorage)])]);
     } catch {
       setError(true);
     } finally {
@@ -127,8 +141,10 @@ export function ScouterDashboard() {
     setPayload((current) => current && {
       ...current,
       openings: filterClientDuplicates(current.openings, window.localStorage),
+      coops: filterClientDuplicates(current.coops, window.localStorage),
     });
     setMarkedDuplicate(opening);
+    setHiddenDuplicates((current) => [...new Set([...current, canonicalApplicationUrl(opening.applyUrl)])]);
 
     try {
       await fetch("/api/duplicates", {
@@ -143,38 +159,41 @@ export function ScouterDashboard() {
     }
   }, []);
 
-  const restoreDuplicate = useCallback(async () => {
-    if (!markedDuplicate) return;
-    const opening = markedDuplicate;
-    setMarkedDuplicate(null);
-
+  const restoreHiddenDuplicate = useCallback(async (applyUrl: string) => {
+    setDuplicateMessage("");
     try {
       const response = await fetch("/api/duplicates", {
         method: "DELETE",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ applyUrl: opening.applyUrl }),
+        body: JSON.stringify({ applyUrl }),
       });
-      if (response.ok) removeClientDuplicate(opening.applyUrl, window.localStorage);
-    } catch {
-      // Keep the local rule until the owner can successfully undo it.
-    } finally {
+      if (!response.ok) throw new Error("Restore failed");
+      removeClientDuplicate(applyUrl, window.localStorage);
+      setHiddenDuplicates((current) => current.filter((url) => url !== canonicalApplicationUrl(applyUrl)));
+      setMarkedDuplicate(null);
       void refresh();
+    } catch {
+      setDuplicateMessage("Unable to restore this opening. Try again.");
     }
-  }, [markedDuplicate, refresh]);
+  }, [refresh]);
+
+  const restoreDuplicate = useCallback(() => {
+    if (markedDuplicate) void restoreHiddenDuplicate(markedDuplicate.applyUrl);
+  }, [markedDuplicate, restoreHiddenDuplicate]);
 
   const openings = useMemo(() => {
     const term = query.trim().toLowerCase();
-    return (payload?.openings ?? []).filter((opening) => {
+    return (view === "coops" ? payload?.coops ?? [] : payload?.openings ?? []).filter((opening) => {
       const matchesQuery = !term
         || companyMatchesSearch(opening.company, term)
         || opening.position.toLowerCase().includes(term);
       return matchesQuery
         && matchesPriority(opening.priority, priorityLevel)
-        && (!summer2027Only || opening.summer2027Confirmed)
+        && (view === "coops" ? coopTerm === "all" || opening.terms?.includes(coopTerm) : !summer2027Only || opening.summer2027Confirmed)
         && (!undergraduateOnly || opening.undergraduateConfirmed)
         && (!newOnly || opening.isNew);
     });
-  }, [newOnly, payload, priorityLevel, query, summer2027Only, undergraduateOnly]);
+  }, [coopTerm, newOnly, payload, priorityLevel, query, summer2027Only, undergraduateOnly, view]);
 
   const companies = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -202,6 +221,7 @@ export function ScouterDashboard() {
           <Link className="wordmark" href="/login" aria-label="scouter login">scouter</Link>
           <nav aria-label="Primary navigation">
             <button className={view === "openings" ? "active" : ""} aria-current={view === "openings" ? "page" : undefined} onClick={() => selectView("openings")}>openings</button>
+            <button className={view === "coops" ? "active" : ""} aria-current={view === "coops" ? "page" : undefined} onClick={() => selectView("coops")}>co-ops</button>
             <button className={view === "companies" ? "active" : ""} aria-current={view === "companies" ? "page" : undefined} onClick={() => selectView("companies")}>companies</button>
           </nav>
           <a className="maker-link" href="https://shlok.fyi/" target="_blank" rel="noreferrer">made by shlok.fyi <span aria-hidden="true">↗</span></a>
@@ -213,16 +233,17 @@ export function ScouterDashboard() {
           <div className="page-header">
             <div>
               <p className="eyebrow">
-                {view === "openings" ? "undergraduate · united states · summer 2027" : `${companyDirectory.length} companies · fortune 500 + targets`}
+                {view === "coops" ? "undergraduate · united states · 2027" : view === "openings" ? "undergraduate · united states · summer 2027" : `${companyDirectory.length} companies · fortune 500 + targets`}
               </p>
-              <h1>{view === "openings" ? "Internship openings" : "Companies"}</h1>
+              <h1>{view === "coops" ? "Co-op openings" : view === "openings" ? "Internship openings" : "Companies"}</h1>
               <p>
-                {view === "openings"
+                {view === "coops" ? "Winter, spring, and fall 2027 co-ops and off-cycle internships."
+                  : view === "openings"
                   ? "Undergraduate Summer 2027 openings from the connected sources."
                   : "The complete company universe Scouter uses for discovery and future source coverage."}
               </p>
             </div>
-            {view === "openings" && (
+            {view !== "companies" && (
               <div className="refresh-control">
                 <button className={`refresh-button ${refreshing ? "refreshing" : ""}`} onClick={() => void refresh()} disabled={refreshing}>
                   <span aria-hidden="true">↻</span>
@@ -242,13 +263,13 @@ export function ScouterDashboard() {
                   type="search"
                   value={query}
                   onChange={(event) => { setQuery(event.target.value); setPage(1); }}
-                  placeholder={view === "openings" ? "company or position" : "company, category, or group"}
+                  placeholder={view !== "companies" ? "company or position" : "company, category, or group"}
                   aria-label={`Search ${view}`}
                 />
               </span>
             </label>
 
-            {view === "openings" && (
+            {view !== "companies" && (
               <div className="priority-control">
                 <div className="priority-heading">
                   <span className="control-label">company priority</span>
@@ -271,11 +292,23 @@ export function ScouterDashboard() {
                   ))}
                 </div>
                 <div className="confirmed-toggles">
+                  {view === "coops" ? (
+                    <label className="term-control">
+                      <span>term</span>
+                      <select value={coopTerm} aria-label="Co-op term" onChange={(event) => { setCoopTerm(event.target.value as CoopTerm | "all"); setPage(1); }}>
+                        <option value="all">all 2027 terms</option>
+                        <option value="winter">winter 2027</option>
+                        <option value="spring">spring 2027</option>
+                        <option value="fall">fall 2027</option>
+                      </select>
+                    </label>
+                  ) : (
                   <label className={`confirmed-toggle ${summer2027Only ? "active" : ""}`}>
                     <input type="checkbox" checked={summer2027Only} onChange={(event) => { setSummer2027Only(event.target.checked); setPage(1); }} />
                     <span className="toggle-track" aria-hidden="true" />
                     <span>confirmed 2027</span>
                   </label>
+                  )}
                   <label className={`confirmed-toggle ${undergraduateOnly ? "active" : ""}`}>
                     <input type="checkbox" checked={undergraduateOnly} onChange={(event) => { setUndergraduateOnly(event.target.checked); setPage(1); }} />
                     <span className="toggle-track" aria-hidden="true" />
@@ -291,8 +324,25 @@ export function ScouterDashboard() {
             )}
           </section>
 
-          {view === "openings" ? (
+          {view !== "companies" && hiddenDuplicates.length > 0 && (
+            <details className="duplicate-review">
+              <summary>hidden duplicates ({hiddenDuplicates.length})</summary>
+              <p>Restore any opening you marked as a duplicate. Your choices stay available after a refresh.</p>
+              <ul>
+                {hiddenDuplicates.map((url) => (
+                  <li key={url}>
+                    <a href={`https://${url}`} target="_blank" rel="noreferrer">{url}</a>
+                    <button type="button" onClick={() => void restoreHiddenDuplicate(`https://${url}`)}>restore</button>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+          {duplicateMessage && <p role="alert" className="duplicate-notice">{duplicateMessage}</p>}
+
+          {view !== "companies" ? (
             <OpeningsFeed
+              isCoop={view === "coops"}
               openings={openingPage.items}
               total={openings.length}
               currentPage={openingPage.currentPage}
@@ -301,7 +351,7 @@ export function ScouterDashboard() {
               payload={payload}
               refreshing={refreshing}
               error={error}
-              filtered={Boolean(query) || priorityLevel > 0 || summer2027Only || undergraduateOnly || newOnly}
+              filtered={Boolean(query) || priorityLevel > 0 || (view === "coops" ? coopTerm !== "all" : summer2027Only) || undergraduateOnly || newOnly}
               markedDuplicate={markedDuplicate}
               markingDuplicateId={markingDuplicateId}
               onMarkDuplicate={markDuplicate}
@@ -334,13 +384,21 @@ export function ScouterDashboard() {
           <a href="https://github.com/Chieler/Summer-2027-SWE-Internships" target="_blank" rel="noreferrer">chieler</a>
           <span aria-hidden="true"> + </span>
           <a href="https://github.com/zshah101/Automated-List-Of-Summer-2027-and-Fall-2026-Tech-Internships" target="_blank" rel="noreferrer">zshah101</a>
+          <span aria-hidden="true"> + </span>
+          <a href="https://github.com/aprameyak/2027-tech-jobs" target="_blank" rel="noreferrer">aprameyak</a>
+          <span aria-hidden="true"> + </span>
+          <a href="https://github.com/ApplyGuy/2027-Internships" target="_blank" rel="noreferrer">applyguy</a>
+          <span aria-hidden="true"> + </span>
+          <a href="https://github.com/GodlyDonuts/keryx" target="_blank" rel="noreferrer">keryx</a>
+          <span> + official company boards</span>
         </span>
       </footer>
     </div>
   );
 }
 
-function OpeningsFeed({ openings, total, currentPage, pageCount, onPageChange, payload, refreshing, error, filtered, markedDuplicate, markingDuplicateId, onMarkDuplicate, onRestoreDuplicate }: {
+function OpeningsFeed({ openings, total, currentPage, pageCount, onPageChange, payload, refreshing, error, filtered, markedDuplicate, markingDuplicateId, onMarkDuplicate, onRestoreDuplicate, isCoop }: {
+  isCoop: boolean;
   openings: Opening[];
   total: number;
   currentPage: number;
@@ -359,10 +417,10 @@ function OpeningsFeed({ openings, total, currentPage, pageCount, onPageChange, p
     <section className="feed" aria-labelledby="feed-heading">
       <div className="feed-meta">
         <div>
-          <h2 id="feed-heading">Open positions</h2>
+          <h2 id="feed-heading">{isCoop ? "Co-ops & off-cycle internships" : "Open positions"}</h2>
           <p aria-live="polite">
             {refreshing && !payload
-              ? "Loading undergraduate Summer 2027 openings."
+              ? isCoop ? "Loading winter, spring, and fall 2027 openings." : "Loading undergraduate Summer 2027 openings."
               : error && !payload
                 ? "The opening feeds are unavailable. Try refresh."
                 : `${total} positions · ${payload?.sourcesChecked ?? 0}/${payload?.sourceCount ?? 0} sources · updated ${payload ? formatTime(payload.checkedAt) : "now"}`}
@@ -375,7 +433,7 @@ function OpeningsFeed({ openings, total, currentPage, pageCount, onPageChange, p
         </div>
         <span className="result-note">
           {total ? `${(currentPage - 1) * PAGE_SIZE + 1}–${Math.min(currentPage * PAGE_SIZE, total)} of ${total}` : "0 of 0"}
-          {filtered && ` · filtered from ${payload?.openings.length ?? 0}`}
+          {filtered && ` · filtered from ${(isCoop ? payload?.coops : payload?.openings)?.length ?? 0}`}
         </span>
       </div>
 
@@ -395,7 +453,10 @@ function OpeningsFeed({ openings, total, currentPage, pageCount, onPageChange, p
                 </span>
               )}
             </strong>
-            <h3 data-label="position">{opening.position}</h3>
+            <div data-label="position">
+              <h3>{opening.position}</h3>
+              {isCoop && <p className="opening-term">{opening.terms?.map((term) => `${term} 2027`).join(" · ")}{opening.location ? ` · ${opening.location}` : ""}</p>}
+            </div>
             <time className="mono-data" data-label="date posted" dateTime={opening.postedAt ?? undefined}>{formatDate(opening.postedAt)}</time>
             <div className="opening-actions" data-label="application">
               <a href={opening.applyUrl} target="_blank" rel="noreferrer" aria-label={`Apply to ${opening.position} at ${opening.company}`}>

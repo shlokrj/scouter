@@ -54,16 +54,18 @@ export async function markManualDuplicate(applyUrl: string) {
 export async function removeManualDuplicate(applyUrl: string) {
   const canonicalUrl = canonicalApplicationUrl(applyUrl);
   memoryDuplicates.delete(canonicalUrl);
+  const originalKey = applyUrl.replace(/^https?:\/\//, "");
+  memoryDuplicates.delete(originalKey);
   const db = database();
   if (!db) return { canonicalUrl, persisted: false };
 
   try {
     await db.batch([
-      db.prepare("DELETE FROM manual_duplicate_overrides WHERE canonical_url = ?").bind(canonicalUrl),
+      db.prepare("DELETE FROM manual_duplicate_overrides WHERE canonical_url = ? OR canonical_url = ?").bind(canonicalUrl, originalKey),
     ]);
     return { canonicalUrl, persisted: true };
   } catch {
-    return { canonicalUrl, persisted: false };
+    throw new Error("Unable to restore the saved duplicate.");
   }
 }
 

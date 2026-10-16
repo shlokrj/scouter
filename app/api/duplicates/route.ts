@@ -1,5 +1,10 @@
 import { hasOwnerSession } from "../../lib/owner-auth";
-import { markManualDuplicate, removeManualDuplicate } from "../../lib/manual-duplicate-store";
+import { manualDuplicateUrls, markManualDuplicate, removeManualDuplicate } from "../../lib/manual-duplicate-store";
+
+export async function GET() {
+  if (!(await hasOwnerSession())) return Response.json({ message: "Owner access required." }, { status: 401 });
+  return Response.json({ urls: [...await manualDuplicateUrls()] }, { headers: { "cache-control": "no-store" } });
+}
 
 function applyUrlFrom(body: unknown) {
   const value = body && typeof body === "object" ? (body as { applyUrl?: unknown }).applyUrl : null;
@@ -30,5 +35,9 @@ export async function DELETE(request: Request) {
   const applyUrl = await readApplyUrl(request);
   if (!applyUrl) return Response.json({ message: "A valid application URL is required." }, { status: 400 });
 
-  return Response.json(await removeManualDuplicate(applyUrl));
+  try {
+    return Response.json(await removeManualDuplicate(applyUrl));
+  } catch {
+    return Response.json({ message: "Unable to restore the saved duplicate. Try again." }, { status: 503 });
+  }
 }
