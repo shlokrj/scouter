@@ -7,6 +7,8 @@ import { canonicalApplicationUrl, isSameRole, roleTokens } from "../../lib/openi
 import { orderOpeningsByDiscovery } from "../../lib/opening-order";
 import { hasOwnerSession } from "../../lib/owner-auth";
 import { hasUndergraduateSignal, inScope } from "../../lib/role-scope";
+import { acceptsUndergraduate, coopTerms, type CoopTerm } from "../../lib/coop-scope";
+import { parseAprameyak, parseApplyGuy, parseKeryx, type CoopSourceOpening } from "../../lib/coop-sources";
 
 type CompanyPriority = "all" | "top" | "faang";
 
@@ -21,6 +23,8 @@ type Opening = {
   undergraduateConfirmed: boolean;
   isNew: boolean;
   discoveredAt: string;
+  terms?: CoopTerm[];
+  location?: string;
 };
 
 const feeds = {
@@ -30,7 +34,23 @@ const feeds = {
   vanshb03: "https://raw.githubusercontent.com/vanshb03/Summer2027-Internships/dev/README.md",
   chieler: "https://raw.githubusercontent.com/Chieler/Summer-2027-SWE-Internships/main/README.md",
   zshah101: "https://raw.githubusercontent.com/zshah101/Automated-List-Of-Summer-2027-and-Fall-2026-Tech-Internships/main/README.md",
+  aprameyak: "https://raw.githubusercontent.com/aprameyak/2027-tech-jobs/main/listings.json",
+  applyGuy: "https://raw.githubusercontent.com/ApplyGuy/2027-Internships/main/data/internships.json",
+  keryxSpring: "https://raw.githubusercontent.com/GodlyDonuts/keryx/main/internships/spring-2027.md",
+  keryxWinter: "https://raw.githubusercontent.com/GodlyDonuts/keryx/main/internships/winter-2027.md",
 };
+
+type FeedMode = "summer" | "coop";
+
+function feedInScope(position: string, mode: FeedMode) {
+  return mode === "coop"
+    ? acceptsUndergraduate(position) && coopTerms(position).length > 0
+    : inScope(position, { sourceIsSummer2027: true });
+}
+
+function fromCoopSource(opening: CoopSourceOpening): Opening {
+  return { ...opening, id: opening.applyUrl, priority: companyPriority(opening.company), summer2027Confirmed: false, isNew: false, discoveredAt: "" };
+}
 
 function decodeHtml(value: string) {
   const named: Record<string, string> = {
@@ -95,7 +115,7 @@ function isSummer2027Confirmed(position: string, applyUrl: string) {
   return /\b(?:summer\s*[-–]?\s*2027|2027\s+summer)\b/i.test(sourceSignal);
 }
 
-function parseSndsh404(markdown: string): Opening[] {
+function parseSndsh404(markdown: string, mode: FeedMode = "summer"): Opening[] {
   return markdown.split("\n").flatMap((line) => {
     if (!line.startsWith("|") || line.includes("| ---") || line.includes("~~")) return [];
     const cells = rowCells(line);
@@ -105,7 +125,7 @@ function parseSndsh404(markdown: string): Opening[] {
 
     const company = canonicalCompanyName(cleanText(cells[0]));
     const position = cleanText(cells[1]);
-    if (!company || !position || !inScope(position, { sourceIsSummer2027: true })) return [];
+    if (!company || !position || !feedInScope(position, mode)) return [];
     const postedAt = /^\d{4}-\d{2}-\d{2}$/.test(cells[4]) ? cells[4] : null;
 
     return [{
@@ -148,7 +168,7 @@ function dateFromMonthDay(value: string) {
   return new Date(Date.UTC(year, month, Number(match[2]))).toISOString().slice(0, 10);
 }
 
-export function parseSpeedyapply(markdown: string): Opening[] {
+export function parseSpeedyapply(markdown: string, mode: FeedMode = "summer"): Opening[] {
   return markdown.split("\n").flatMap((line) => {
     if (!line.startsWith("|") || !line.includes('alt="Apply"')) return [];
     const cells = rowCells(line);
@@ -157,7 +177,7 @@ export function parseSpeedyapply(markdown: string): Opening[] {
     const applyCell = cells.find((cell) => cell.includes('alt="Apply"')) ?? "";
     const applyUrl = applyCell.match(/<a href="(https?:\/\/[^\"]+)"/i)?.[1];
     const postedAt = dateFromAge(cells.at(-1) ?? "");
-    if (!company || !position || !applyUrl || !inScope(position, { sourceIsSummer2027: true })) return [];
+    if (!company || !position || !applyUrl || !feedInScope(position, mode)) return [];
 
     return [{
       id: applyUrl,
@@ -174,7 +194,7 @@ export function parseSpeedyapply(markdown: string): Opening[] {
   });
 }
 
-function parseVanshb03(markdown: string): Opening[] {
+function parseVanshb03(markdown: string, mode: FeedMode = "summer"): Opening[] {
   let previousCompany = "";
 
   return markdown.split("\n").flatMap((line) => {
@@ -189,7 +209,7 @@ function parseVanshb03(markdown: string): Opening[] {
     const position = cleanText(cells[1]);
     const applyUrl = linkFromCell(cells[3]);
     const postedAt = dateFromMonthDay(cleanText(cells[4]));
-    if (!company || !position || !applyUrl || !inScope(position, { sourceIsSummer2027: true })) return [];
+    if (!company || !position || !applyUrl || !feedInScope(position, mode)) return [];
 
     return [{
       id: applyUrl,
@@ -206,7 +226,7 @@ function parseVanshb03(markdown: string): Opening[] {
   });
 }
 
-function parseChieler(markdown: string): Opening[] {
+function parseChieler(markdown: string, mode: FeedMode = "summer"): Opening[] {
   return markdown.split("\n").flatMap((line) => {
     if (!line.startsWith("|") || line.includes("|---")) return [];
     const cells = rowCells(line);
@@ -216,7 +236,7 @@ function parseChieler(markdown: string): Opening[] {
     const position = cleanText(cells[1]);
     const postedAt = /^\d{4}-\d{2}-\d{2}$/.test(cells[2]) ? cells[2] : null;
     const applyUrl = linkFromCell(cells[4]);
-    if (!company || !position || !postedAt || !applyUrl || !inScope(position, { sourceIsSummer2027: true })) return [];
+    if (!company || !position || !postedAt || !applyUrl || !feedInScope(position, mode)) return [];
 
     return [{
       id: applyUrl,
@@ -238,7 +258,7 @@ function dateFromLongDate(value: string) {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString().slice(0, 10) : null;
 }
 
-export function parseZshah101(markdown: string): Opening[] {
+export function parseZshah101(markdown: string, mode: FeedMode = "summer"): Opening[] {
   return markdown.split("\n").flatMap((line) => {
     if (!line.startsWith("|") || line.includes("| ---")) return [];
     const cells = rowCells(line);
@@ -247,7 +267,7 @@ export function parseZshah101(markdown: string): Opening[] {
     const company = canonicalCompanyName(cleanText(cells[0]));
     const position = cleanText(cells[1]);
     const applyUrl = linkFromCell(cells[5]);
-    if (!company || !position || !applyUrl || !inScope(position, { sourceIsSummer2027: true })) return [];
+    if (!company || !position || !applyUrl || !feedInScope(position, mode)) return [];
 
     return [{
       id: applyUrl,
@@ -284,7 +304,8 @@ function parseGreenhouse(board: GreenhouseBoard, value: unknown): Opening[] {
   return jobs.flatMap((job) => {
     const position = typeof job.title === "string" ? cleanText(job.title) : "";
     const applyUrl = typeof job.absolute_url === "string" ? job.absolute_url : "";
-    if (!position || !applyUrl || !inScope(position, { technicalOnly: true })) return [];
+    const terms = coopTerms(position);
+    if (!position || !applyUrl || !(inScope(position, { technicalOnly: true }) || (terms.length && acceptsUndergraduate(position)))) return [];
 
     const postedAt = dateFromIso(job.first_published);
     return [{
@@ -298,6 +319,7 @@ function parseGreenhouse(board: GreenhouseBoard, value: unknown): Opening[] {
       undergraduateConfirmed: hasUndergraduateSignal(position),
       isNew: false,
       discoveredAt: "",
+      terms,
     }];
   });
 }
@@ -318,11 +340,13 @@ function keepBestOpening(left: Opening, right: Opening) {
     summer2027Confirmed: left.summer2027Confirmed || right.summer2027Confirmed,
     undergraduateConfirmed: left.undergraduateConfirmed || right.undergraduateConfirmed,
     isNew: left.isNew || right.isNew,
+    terms: (["winter", "spring", "fall"] as const).filter((term) => (left.terms ?? coopTerms(left.position)).includes(term) || (right.terms ?? coopTerms(right.position)).includes(term)),
   };
 }
 
 function openingFingerprint(opening: Opening) {
-  return `${companyKey(opening.company)}:${roleTokens(opening.position).join("-")}`;
+  const terms = opening.terms ?? coopTerms(opening.position);
+  return `${companyKey(opening.company)}:${roleTokens(opening.position).join("-")}${terms.length ? `:coop-${terms.join("-")}` : ""}`;
 }
 
 export function dedupe(openings: Opening[]) {
@@ -332,7 +356,9 @@ export function dedupe(openings: Opening[]) {
   for (const opening of openings) {
     const canonicalUrl = canonicalApplicationUrl(opening.applyUrl);
     const duplicateIndex = indexesByUrl.get(canonicalUrl) ?? unique.findIndex((existing) =>
-      companyKey(existing.company) === companyKey(opening.company) && isSameRole(existing.position, opening.position),
+      companyKey(existing.company) === companyKey(opening.company)
+        && (existing.terms ?? coopTerms(existing.position)).join(":") === (opening.terms ?? coopTerms(opening.position)).join(":")
+        && isSameRole(existing.position, opening.position),
     );
 
     if (duplicateIndex === -1) {
@@ -385,6 +411,10 @@ export async function GET() {
     fetchFeed(feeds.vanshb03),
     fetchFeed(feeds.chieler),
     fetchFeed(feeds.zshah101),
+    fetchFeed(feeds.aprameyak),
+    fetchFeed(feeds.applyGuy),
+    fetchFeed(feeds.keryxSpring),
+    fetchFeed(feeds.keryxWinter),
   ]);
   const greenhouseSettled = await Promise.allSettled(greenhouseBoards.map(fetchGreenhouse));
 
@@ -395,6 +425,22 @@ export async function GET() {
   const chielerOpenings = communitySettled[4].status === "fulfilled" ? parseChieler(communitySettled[4].value) : [];
   const zshahOpenings = communitySettled[5].status === "fulfilled" ? parseZshah101(communitySettled[5].value) : [];
   const greenhouseOpenings = greenhouseSettled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+  const originalParsers = [parseSndsh404, parseSpeedyapply, parseSpeedyapply, parseVanshb03, parseChieler, parseZshah101];
+  const coopOpenings = originalParsers.flatMap((parse, index) => {
+    const result = communitySettled[index];
+    return result.status === "fulfilled" ? parse(result.value, "coop") : [];
+  });
+  const newParsers = [
+    (value: string) => parseAprameyak(JSON.parse(value)),
+    (value: string) => parseApplyGuy(JSON.parse(value)),
+    (value: string) => parseKeryx(value, "spring"),
+    (value: string) => parseKeryx(value, "winter"),
+  ];
+  const addedCoops = newParsers.flatMap((parse, index) => {
+    const result = communitySettled[index + 6];
+    if (result.status !== "fulfilled") return [];
+    try { return parse(result.value).map(fromCoopSource); } catch { return []; }
+  });
   const deduplicated = dedupe([
     ...sndshOpenings,
     ...speedyOpenings,
@@ -403,7 +449,9 @@ export async function GET() {
     ...chielerOpenings,
     ...zshahOpenings,
     ...greenhouseOpenings,
-  ]).map((opening) => ({
+    ...coopOpenings,
+    ...addedCoops,
+  ].map((opening) => ({ ...opening, terms: opening.terms ?? coopTerms(opening.position) }))).map((opening) => ({
     ...opening,
     id: openingFingerprint(opening),
   }));
@@ -412,7 +460,8 @@ export async function GET() {
   ));
 
   return Response.json({
-    openings,
+    openings: openings.filter((opening) => !opening.terms?.length),
+    coops: openings.filter((opening) => opening.terms?.length),
     checkedAt: new Date().toISOString(),
     sourcesChecked: [...communitySettled, ...greenhouseSettled].filter((result) => result.status === "fulfilled").length,
     sourceCount: communitySettled.length + greenhouseSettled.length,

@@ -3,6 +3,18 @@ const ignoredQueryParameter = /^(?:utm_[^=]+|ref(?:errer)?|source|tracking|trk|g
 export function canonicalApplicationUrl(value: string) {
   try {
     const url = new URL(value);
+    if (/^(?:boards|job-boards)\.greenhouse\.io$/.test(url.hostname)) {
+      const job = url.pathname.match(/^\/([^/]+)\/jobs\/(\d+)/);
+      if (job) return `job-boards.greenhouse.io/${job[1]}/jobs/${job[2]}`;
+    }
+    if (url.hostname === "jobs.ashbyhq.com") {
+      const job = url.pathname.match(/^\/([^/]+)\/([\da-f-]{36})(?:\/application)?\/?$/i);
+      if (job) return `jobs.ashbyhq.com/${job[1]}/${job[2]}`;
+    }
+    if (url.hostname === "jobs.lever.co") {
+      const job = url.pathname.match(/^\/([^/]+)\/([\da-f-]{36})(?:\/apply)?\/?$/i);
+      if (job) return `jobs.lever.co/${job[1]}/${job[2]}`;
+    }
     const parameters = [...url.searchParams.entries()]
       .filter(([key]) => !ignoredQueryParameter.test(key))
       .sort(([left], [right]) => left.localeCompare(right));
@@ -51,5 +63,6 @@ export function isSameRole(left: string, right: string) {
 }
 
 export function withoutManualDuplicates<T extends { applyUrl: string }>(openings: T[], duplicateUrls: ReadonlySet<string>) {
-  return openings.filter((opening) => !duplicateUrls.has(canonicalApplicationUrl(opening.applyUrl)));
+  const normalizedUrls = new Set([...duplicateUrls].map((url) => canonicalApplicationUrl(`https://${url}`)));
+  return openings.filter((opening) => !normalizedUrls.has(canonicalApplicationUrl(opening.applyUrl)));
 }

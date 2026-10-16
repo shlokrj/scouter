@@ -6,6 +6,10 @@ export type GreenhouseBoard = {
 // Official public boards for companies in Scouter's priority universe.
 // Community-maintained feeds supplement companies without a public board API.
 export const greenhouseBoards: GreenhouseBoard[] = [
+  { company: "Anduril", board: "andurilindustries" },
+  { company: "Databricks", board: "databricks" },
+  { company: "SpaceX", board: "spacex" },
+  { company: "xAI", board: "xai" },
   { company: "Airbnb", board: "airbnb" },
   { company: "Asana", board: "asana" },
   { company: "Cloudflare", board: "cloudflare" },

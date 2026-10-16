@@ -30,6 +30,12 @@ function database() {
   return (globalThis as typeof globalThis & { __SCOUTER_RUNTIME__?: DiscoveryRuntime }).__SCOUTER_RUNTIME__?.DB ?? null;
 }
 
+function chunks<T>(values: T[], size: number) {
+  const result: T[][] = [];
+  for (let index = 0; index < values.length; index += size) result.push(values.slice(index, index + size));
+  return result;
+}
+
 function discoveredRecently(firstSeenAt: string, now: number) {
   const timestamp = Date.parse(firstSeenAt);
   return Number.isFinite(timestamp) && now - timestamp >= 0 && now - timestamp < NEW_DISCOVERY_WINDOW_MS;
@@ -63,18 +69,20 @@ export async function annotateDiscoveries<T extends DiscoveryOpening>(openings: 
   try {
     const count = await db.prepare("SELECT COUNT(*) AS count FROM discovered_openings").first<{ count: number | string }>();
     const existingCount = Number(count?.count ?? 0);
-    const existing = await db.batch<StoredOpening>(openings.map((opening) =>
-      db.prepare("SELECT fingerprint, first_seen_at, is_baseline FROM discovered_openings WHERE fingerprint = ?").bind(opening.id),
+    const existing = await db.batch<StoredOpening>(chunks(openings, 80).map((group) =>
+      db.prepare(`SELECT fingerprint, first_seen_at, is_baseline FROM discovered_openings WHERE fingerprint IN (${group.map(() => "?").join(",")})`).bind(...group.map((opening) => opening.id)),
     ));
     const existingByFingerprint = new Map(
       existing.flatMap((result) => result.results).map((row) => [row.fingerprint, row]),
     );
     const isBaseline = existingCount === 0;
 
-    await db.batch(openings.map((opening) =>
+    // Twelve rows per statement keep bindings below D1's parameter limit while
+    // avoiding thousands of database subrequests as more sources are connected.
+    await db.batch(chunks(openings, 12).map((group) =>
       db.prepare(
-        "INSERT INTO discovered_openings (fingerprint, company, position, apply_url, is_baseline, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(fingerprint) DO UPDATE SET company = excluded.company, position = excluded.position, apply_url = excluded.apply_url, last_seen_at = excluded.last_seen_at",
-      ).bind(
+        `INSERT INTO discovered_openings (fingerprint, company, position, apply_url, is_baseline, first_seen_at, last_seen_at) VALUES ${group.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(",")} ON CONFLICT(fingerprint) DO UPDATE SET company = excluded.company, position = excluded.position, apply_url = excluded.apply_url, last_seen_at = excluded.last_seen_at`,
+      ).bind(...group.flatMap((opening) => [
         opening.id,
         opening.company,
         opening.position,
@@ -82,7 +90,7 @@ export async function annotateDiscoveries<T extends DiscoveryOpening>(openings: 
         isBaseline ? 1 : 0,
         existingByFingerprint.get(opening.id)?.first_seen_at ?? timestamp,
         timestamp,
-      ),
+      ])),
     ));
 
     const now = Date.parse(timestamp);
