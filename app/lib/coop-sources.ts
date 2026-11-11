@@ -1,5 +1,5 @@
 import { canonicalCompanyName } from "../data/company-identities";
-import { acceptsUndergraduate, coopTerms, type CoopTerm } from "./coop-scope";
+import { acceptsUndergraduate, coopTerms, hasFallWorkTerm, type CoopTerm } from "./coop-scope";
 import { hasUndergraduateSignal } from "./role-scope";
 
 export type CoopSourceOpening = {
@@ -15,6 +15,11 @@ export type CoopSourceOpening = {
 const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
 const isoDate = (value: unknown) => /^\d{4}-\d{2}-\d{2}$/.test(text(value)) ? text(value) : null;
 
+export function isStudentOpening(title: string) {
+  return /\b(?:intern(?:ship|ships|s)?|co[\s‐‑–-]*op(?:erative)?|student (?:experience|placement|worker))\b/i.test(title)
+    && !/\b(?:former interns? only|new grad(?:uate)? program)\b/i.test(title);
+}
+
 function candidate(company: unknown, title: unknown, url: unknown, posted: unknown, location: unknown, education = "", sourceTerm?: CoopTerm, termEvidence = ""): CoopSourceOpening[] {
   const position = text(title);
   const applyUrl = text(url).replace(/&amp;/g, "&");
@@ -23,16 +28,33 @@ function candidate(company: unknown, title: unknown, url: unknown, posted: unkno
   const place = text(location);
   if (/\b(?:canada|toronto|ottawa|vancouver|waterloo|montreal|london|united kingdom|germany|india)\b|,\s*(?:ON|BC|QC|AB)\b/i.test(place)
     && !/\b(?:united states|usa|us|u\.s\.)\b/i.test(place)) return [];
-  const terms = coopTerms(`${position} ${termEvidence} ${applyUrl.replace(/[/-]/g, " ")}`, sourceTerm);
+  let path: string;
+  try {
+    const url = new URL(applyUrl);
+    path = decodeURIComponent(url.pathname).replace(/[/-]/g, " ");
+  } catch {
+    return [];
+  }
+  const terms = coopTerms(`${position} ; ${termEvidence} ; ${path}`, sourceTerm);
   if (!terms.length) return [];
   return [{ company: canonicalCompanyName(text(company)), position, applyUrl, postedAt: isoDate(posted), location: place, terms, undergraduateConfirmed: hasUndergraduateSignal(`${position} ${education}`) }];
+}
+
+export function officialFallOpening(company: string, title: unknown, url: unknown, posted: unknown, location: unknown, description: unknown): CoopSourceOpening[] {
+  const position = text(title);
+  if (!isStudentOpening(position)) return [];
+  const explicit = candidate(company, title, url, posted, location).filter((row) => row.terms.includes("fall"));
+  if (explicit.length) return explicit;
+  if (!hasFallWorkTerm(text(description))) return [];
+  return candidate(company, title, url, posted, location, "", "fall").filter((row) => row.terms.includes("fall"));
 }
 
 export function parseAprameyak(value: unknown): CoopSourceOpening[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((row) => {
-    if (!row || typeof row !== "object" || row.type !== "offcycle" || row.closed === true) return [];
-    return candidate(row.company, row.role, row.url, row.date_added, row.location, text(row.education), undefined, text(row.season));
+    if (!row || typeof row !== "object" || row.closed === true) return [];
+    const rows = candidate(row.company, row.role, row.url, null, row.location, text(row.education), undefined, text(row.season));
+    return rows.filter((opening) => row.type === "offcycle" || (row.type === "summer" && opening.terms.includes("fall") && isStudentOpening(opening.position)));
   });
 }
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { coopTerms } from "../../app/lib/coop-scope";
 import { parseAprameyak, parseApplyGuy, parseKeryx } from "../../app/lib/coop-sources";
-import { dedupe, parseSpeedyapply } from "../../app/api/roles/route";
+import { dedupe, parseFallBoard, parseSpeedyapply } from "../../app/api/roles/route";
 import { canonicalApplicationUrl } from "../../app/lib/opening-dedupe";
 
 test("assigns only 2027 work terms, including combined rotations", () => {
@@ -26,11 +26,33 @@ test("imports undergraduate off-cycle listings with source terms and direct empl
   const openings = parseAprameyak(rows);
   assert.equal(openings.length, 1);
   assert.deepEqual(openings[0].terms, ["spring"]);
-  assert.equal(openings[0].postedAt, "2026-10-16");
+  assert.equal(openings[0].postedAt, null);
   assert.equal(openings[0].undergraduateConfirmed, true);
   const [applyGuy] = parseApplyGuy({ jobs: [{ company: "Example", title: "AI Engineering Co-op - Winter 2027", listingUrl: "https://employer.com/1", url: "https://applyguy.ai/1", posted: "2026-10-15" }] });
   assert.equal(applyGuy.applyUrl, "https://employer.com/1");
   assert.deepEqual(parseApplyGuy({ jobs: [{ company: "Example", title: "Co-op - Winter 2027", url: "https://applyguy.ai/1" }] }), []);
+});
+
+test("recovers combined summer/fall roles filed in the summer bucket", () => {
+  const [role] = parseAprameyak([{ company: "Example", role: "Engineering Intern (Summer and Autumn 2027)", type: "summer", url: "https://example.com/jobs/42" }]);
+  assert.deepEqual(role.terms, ["fall"]);
+  assert.deepEqual(coopTerms("Fall semester 2027 internship"), ["fall"]);
+  assert.deepEqual(coopTerms("Spring 2027 / Fall 2028 internship"), ["spring"]);
+});
+
+test("official boards use start dates but reject graduation dates and non-student jobs", () => {
+  const role = { text: "Software Engineering Intern", country: "US", applyUrl: "https://jobs.lever.co/example/1/apply" };
+  const results = parseFallBoard("Example", "lever", [
+    { ...role, descriptionPlain: "Start date: September 7, 2027." },
+    { ...role, text: "Senior Software Engineer", descriptionPlain: "Starts in September 2027." },
+    { ...role, descriptionPlain: "Expected graduation: Fall 2027." },
+    { ...role, descriptionPlain: "Internship term: Fall 2026." },
+    { ...role, text: "Software Engineering Intern — Spring 2027", descriptionPlain: "Start date: September 7, 2027." },
+  ]);
+  assert.equal(results.length, 1);
+  assert.deepEqual(results[0].terms, ["fall"]);
+  assert.equal(results[0].postedAt, null);
+  assert.deepEqual(parseFallBoard("Example", "ashby", { jobs: [{ title: "Fall 2027 Intern", applyUrl: "https://jobs.ashbyhq.com/example/1", isListed: false }] }), []);
 });
 
 test("reads employer links from season-specific Keryx tables without treating eligibility as the term", () => {

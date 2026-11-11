@@ -1,6 +1,6 @@
 import { watchlist } from "../../data/watchlist";
 import { canonicalCompanyName, companyKey } from "../../data/company-identities";
-import { greenhouseBoards, type GreenhouseBoard } from "../../data/official-ats";
+import { fallBoards, fallWorkdayBoards, greenhouseBoards, type GreenhouseBoard } from "../../data/official-ats";
 import { annotateDiscoveries } from "../../lib/discovery-store";
 import { manualDuplicateUrls, withoutManualDuplicates } from "../../lib/manual-duplicate-store";
 import { canonicalApplicationUrl, isSameRole, roleTokens } from "../../lib/opening-dedupe";
@@ -8,7 +8,7 @@ import { orderOpeningsByDiscovery } from "../../lib/opening-order";
 import { hasOwnerSession } from "../../lib/owner-auth";
 import { hasUndergraduateSignal, inScope } from "../../lib/role-scope";
 import { acceptsUndergraduate, coopTerms, type CoopTerm } from "../../lib/coop-scope";
-import { parseAprameyak, parseApplyGuy, parseKeryx, type CoopSourceOpening } from "../../lib/coop-sources";
+import { isStudentOpening, officialFallOpening, parseAprameyak, parseApplyGuy, parseKeryx, type CoopSourceOpening } from "../../lib/coop-sources";
 
 type CompanyPriority = "all" | "top" | "faang";
 
@@ -288,6 +288,8 @@ type GreenhouseJob = {
   absolute_url?: unknown;
   first_published?: unknown;
   title?: unknown;
+  content?: unknown;
+  location?: { name?: unknown };
 };
 
 function dateFromIso(value: unknown) {
@@ -305,6 +307,10 @@ function parseGreenhouse(board: GreenhouseBoard, value: unknown): Opening[] {
     const position = typeof job.title === "string" ? cleanText(job.title) : "";
     const applyUrl = typeof job.absolute_url === "string" ? job.absolute_url : "";
     const terms = coopTerms(position);
+    const fall = officialFallOpening(company, position, applyUrl, dateFromIso(job.first_published), job.location?.name,
+      typeof job.content === "string" ? decodeHtml(job.content).replace(/<\/?(?:p|li|div|br)\b[^>]*>/gi, "\n").replace(/<[^>]+>/g, "") : "");
+    if (fall.length) return fall.map(fromCoopSource);
+    if (terms.includes("fall")) return [];
     if (!position || !applyUrl || !(inScope(position, { technicalOnly: true }) || (terms.length && acceptsUndergraduate(position)))) return [];
 
     const postedAt = dateFromIso(job.first_published);
@@ -352,22 +358,29 @@ function openingFingerprint(opening: Opening) {
 export function dedupe(openings: Opening[]) {
   const unique: Opening[] = [];
   const indexesByUrl = new Map<string, number>();
+  const indexesByCompany = new Map<string, number[]>();
 
   for (const opening of openings) {
     const canonicalUrl = canonicalApplicationUrl(opening.applyUrl);
-    const duplicateIndex = indexesByUrl.get(canonicalUrl) ?? unique.findIndex((existing) =>
-      companyKey(existing.company) === companyKey(opening.company)
-        && (existing.terms ?? coopTerms(existing.position)).join(":") === (opening.terms ?? coopTerms(opening.position)).join(":")
-        && isSameRole(existing.position, opening.position),
-    );
+    const key = companyKey(opening.company);
+    const indexes = indexesByCompany.get(key) ?? [];
+    const terms = (opening.terms ?? coopTerms(opening.position)).join(":");
+    const duplicateIndex = indexesByUrl.get(canonicalUrl) ?? indexes.find((index) => {
+      const existing = unique[index];
+      return companyKey(existing.company) === key
+        && (existing.terms ?? coopTerms(existing.position)).join(":") === terms
+        && isSameRole(existing.position, opening.position);
+    });
 
-    if (duplicateIndex === -1) {
+    if (duplicateIndex === undefined) {
       unique.push(opening);
     } else {
       unique[duplicateIndex] = keepBestOpening(unique[duplicateIndex], opening);
     }
 
-    const index = duplicateIndex === -1 ? unique.length - 1 : duplicateIndex;
+    const index = duplicateIndex ?? unique.length - 1;
+    if (!indexes.includes(index)) indexes.push(index);
+    indexesByCompany.set(key, indexes);
     indexesByUrl.set(canonicalUrl, index);
     indexesByUrl.set(canonicalApplicationUrl(unique[index].applyUrl), index);
   }
@@ -388,7 +401,7 @@ async function fetchFeed(url: string) {
 }
 
 async function fetchGreenhouse(board: GreenhouseBoard) {
-  const response = await fetch(`https://boards-api.greenhouse.io/v1/boards/${board.board}/jobs`, {
+  const response = await fetch(`https://boards-api.greenhouse.io/v1/boards/${board.board}/jobs?content=true`, {
     headers: {
       accept: "application/json",
       "user-agent": "Scouter/0.3 (+internship discovery)",
@@ -399,12 +412,51 @@ async function fetchGreenhouse(board: GreenhouseBoard) {
   return parseGreenhouse(board, await response.json());
 }
 
-export async function GET() {
-  if (!(await hasOwnerSession())) {
-    return Response.json({ message: "Owner access required." }, { status: 401 });
-  }
+export function parseFallBoard(company: string, provider: "lever" | "ashby", value: unknown): Opening[] {
+  const jobs = provider === "lever" ? value : (value as { jobs?: unknown } | null)?.jobs;
+  if (!Array.isArray(jobs)) throw new Error("Unexpected job board response");
+  return jobs.flatMap((job) => {
+    if (!job || typeof job !== "object") return [];
+    if (provider === "lever") {
+      if (job.country && job.country !== "US") return [];
+      return officialFallOpening(company, job.text, job.applyUrl, null, job.categories?.location, job.descriptionPlain).map(fromCoopSource);
+    }
+    if (job.isListed !== true || (job.address?.postalAddress?.addressCountry && job.address.postalAddress.addressCountry !== "US")) return [];
+    return officialFallOpening(company, job.title, job.applyUrl, dateFromIso(job.publishedAt), job.location, job.descriptionPlain).map(fromCoopSource);
+  });
+}
 
-  const communitySettled = await Promise.allSettled([
+async function fetchFallBoard(board: typeof fallBoards[number]) {
+  const response = await fetch(board.url, { signal: AbortSignal.timeout(12000) });
+  if (!response.ok) throw new Error(`Job board returned ${response.status}`);
+  return parseFallBoard(board.company, board.provider, await response.json());
+}
+
+async function fetchFallWorkday(board: typeof fallWorkdayBoards[number]) {
+  const limit = 20;
+  const signal = AbortSignal.timeout(12000);
+  const openings: Opening[] = [];
+  for (let offset = 0; offset < 100; offset += limit) {
+    const response = await fetch(`${board.origin}/wday/cxs/${board.tenant}/${board.site}/jobs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ appliedFacets: {}, limit, offset, searchText: "Fall 2027" }),
+      signal,
+    });
+    if (!response.ok) throw new Error(`Workday board returned ${response.status}`);
+    const page = await response.json();
+    if (!Array.isArray(page?.jobPostings)) throw new Error("Unexpected Workday board response");
+    for (const job of page.jobPostings) {
+      if (typeof job?.externalPath !== "string" || !job.externalPath.startsWith("/job/")) continue;
+      openings.push(...officialFallOpening(board.company, job.title, `${board.origin}/${board.site}${job.externalPath}`, null, job.locationsText, "").map(fromCoopSource));
+    }
+    if (page.jobPostings.length < limit || offset + limit >= page.total) break;
+  }
+  return openings;
+}
+
+export async function scanOpenings() {
+  const [communitySettled, greenhouseSettled, fallSettled] = await Promise.all([Promise.allSettled([
     fetchFeed(feeds.sndsh404),
     fetchFeed(feeds.speedyapply),
     fetchFeed(feeds.speedyapplyAi),
@@ -415,8 +467,10 @@ export async function GET() {
     fetchFeed(feeds.applyGuy),
     fetchFeed(feeds.keryxSpring),
     fetchFeed(feeds.keryxWinter),
-  ]);
-  const greenhouseSettled = await Promise.allSettled(greenhouseBoards.map(fetchGreenhouse));
+  ]), Promise.allSettled(greenhouseBoards.map(fetchGreenhouse)), Promise.allSettled([
+    ...fallBoards.map(fetchFallBoard),
+    ...fallWorkdayBoards.map(fetchFallWorkday),
+  ])]);
 
   const sndshOpenings = communitySettled[0].status === "fulfilled" ? parseSndsh404(communitySettled[0].value) : [];
   const speedyOpenings = communitySettled[1].status === "fulfilled" ? parseSpeedyapply(communitySettled[1].value) : [];
@@ -451,7 +505,9 @@ export async function GET() {
     ...greenhouseOpenings,
     ...coopOpenings,
     ...addedCoops,
-  ].map((opening) => ({ ...opening, terms: opening.terms ?? coopTerms(opening.position) }))).map((opening) => ({
+    ...fallSettled.flatMap((result) => result.status === "fulfilled" ? result.value : []),
+  ].map((opening) => ({ ...opening, terms: opening.terms ?? coopTerms(opening.position) }))
+    .filter((opening) => !opening.terms.includes("fall") || isStudentOpening(opening.position))).map((opening) => ({
     ...opening,
     id: openingFingerprint(opening),
   }));
@@ -459,11 +515,18 @@ export async function GET() {
     withoutManualDuplicates(deduplicated, await manualDuplicateUrls()),
   ));
 
-  return Response.json({
+  return {
     openings: openings.filter((opening) => !opening.terms?.length),
     coops: openings.filter((opening) => opening.terms?.length),
     checkedAt: new Date().toISOString(),
-    sourcesChecked: [...communitySettled, ...greenhouseSettled].filter((result) => result.status === "fulfilled").length,
-    sourceCount: communitySettled.length + greenhouseSettled.length,
-  }, { headers: { "cache-control": "no-store" } });
+    sourcesChecked: [...communitySettled, ...greenhouseSettled, ...fallSettled].filter((result) => result.status === "fulfilled").length,
+    sourceCount: communitySettled.length + greenhouseSettled.length + fallSettled.length,
+  };
+}
+
+export async function GET() {
+  if (!(await hasOwnerSession())) {
+    return Response.json({ message: "Owner access required." }, { status: 401 });
+  }
+  return Response.json(await scanOpenings(), { headers: { "cache-control": "no-store" } });
 }

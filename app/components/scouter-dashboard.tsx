@@ -9,7 +9,7 @@ import { canonicalApplicationUrl } from "../lib/opening-dedupe";
 import { orderOpeningsByDiscovery } from "../lib/opening-order";
 import { type CoopTerm } from "../lib/coop-scope";
 
-type View = "openings" | "coops" | "companies";
+type View = "openings" | "fall" | "coops" | "companies";
 type CompanyPriority = "all" | "top" | "faang";
 
 type Opening = {
@@ -88,6 +88,7 @@ function matchesPriority(priority: CompanyPriority, level: number) {
 
 export function ScouterDashboard() {
   const [view, setView] = useState<View>("openings");
+  const isOffCycle = view === "coops" || view === "fall";
   const [query, setQuery] = useState("");
   const [priorityLevel, setPriorityLevel] = useState(0);
   const [summer2027Only, setSummer2027Only] = useState(false);
@@ -183,17 +184,19 @@ export function ScouterDashboard() {
 
   const openings = useMemo(() => {
     const term = query.trim().toLowerCase();
-    return (view === "coops" ? payload?.coops ?? [] : payload?.openings ?? []).filter((opening) => {
+    return (isOffCycle ? payload?.coops ?? [] : payload?.openings ?? []).filter((opening) => {
       const matchesQuery = !term
         || companyMatchesSearch(opening.company, term)
         || opening.position.toLowerCase().includes(term);
       return matchesQuery
         && matchesPriority(opening.priority, priorityLevel)
-        && (view === "coops" ? coopTerm === "all" || opening.terms?.includes(coopTerm) : !summer2027Only || opening.summer2027Confirmed)
+        && (view === "fall" ? opening.terms?.includes("fall")
+          : view === "coops" ? coopTerm === "all" || opening.terms?.includes(coopTerm)
+            : !summer2027Only || opening.summer2027Confirmed)
         && (!undergraduateOnly || opening.undergraduateConfirmed)
         && (!newOnly || opening.isNew);
     });
-  }, [coopTerm, newOnly, payload, priorityLevel, query, summer2027Only, undergraduateOnly, view]);
+  }, [coopTerm, isOffCycle, newOnly, payload, priorityLevel, query, summer2027Only, undergraduateOnly, view]);
 
   const companies = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -221,6 +224,7 @@ export function ScouterDashboard() {
           <Link className="wordmark" href="/login" aria-label="scouter login">scouter</Link>
           <nav aria-label="Primary navigation">
             <button className={view === "openings" ? "active" : ""} aria-current={view === "openings" ? "page" : undefined} onClick={() => selectView("openings")}>openings</button>
+            <button className={view === "fall" ? "active" : ""} aria-current={view === "fall" ? "page" : undefined} onClick={() => selectView("fall")}>fall 2027</button>
             <button className={view === "coops" ? "active" : ""} aria-current={view === "coops" ? "page" : undefined} onClick={() => selectView("coops")}>co-ops</button>
             <button className={view === "companies" ? "active" : ""} aria-current={view === "companies" ? "page" : undefined} onClick={() => selectView("companies")}>companies</button>
           </nav>
@@ -233,11 +237,12 @@ export function ScouterDashboard() {
           <div className="page-header">
             <div>
               <p className="eyebrow">
-                {view === "coops" ? "undergraduate · united states · 2027" : view === "openings" ? "undergraduate · united states · summer 2027" : `${companyDirectory.length} companies · fortune 500 + targets`}
+                {isOffCycle ? "undergraduate · united states · 2027" : view === "openings" ? "undergraduate · united states · summer 2027" : `${companyDirectory.length} companies · fortune 500 + targets`}
               </p>
-              <h1>{view === "coops" ? "Co-op openings" : view === "openings" ? "Internship openings" : "Companies"}</h1>
+              <h1>{view === "fall" ? "Fall 2027 internships" : view === "coops" ? "Co-op openings" : view === "openings" ? "Internship openings" : "Companies"}</h1>
               <p>
-                {view === "coops" ? "Winter, spring, and fall 2027 co-ops and off-cycle internships."
+                {view === "fall" ? "Internships and co-ops that start or continue into fall 2027."
+                  : view === "coops" ? "Winter, spring, and fall 2027 co-ops and off-cycle internships."
                   : view === "openings"
                   ? "Undergraduate Summer 2027 openings from the connected sources."
                   : "The complete company universe Scouter uses for discovery and future source coverage."}
@@ -302,7 +307,7 @@ export function ScouterDashboard() {
                         <option value="fall">fall 2027</option>
                       </select>
                     </label>
-                  ) : (
+                  ) : view === "openings" && (
                   <label className={`confirmed-toggle ${summer2027Only ? "active" : ""}`}>
                     <input type="checkbox" checked={summer2027Only} onChange={(event) => { setSummer2027Only(event.target.checked); setPage(1); }} />
                     <span className="toggle-track" aria-hidden="true" />
@@ -342,7 +347,8 @@ export function ScouterDashboard() {
 
           {view !== "companies" ? (
             <OpeningsFeed
-              isCoop={view === "coops"}
+              isCoop={isOffCycle}
+              isFall={view === "fall"}
               openings={openingPage.items}
               total={openings.length}
               currentPage={openingPage.currentPage}
@@ -351,7 +357,7 @@ export function ScouterDashboard() {
               payload={payload}
               refreshing={refreshing}
               error={error}
-              filtered={Boolean(query) || priorityLevel > 0 || (view === "coops" ? coopTerm !== "all" : summer2027Only) || undergraduateOnly || newOnly}
+              filtered={Boolean(query) || priorityLevel > 0 || (view === "coops" ? coopTerm !== "all" : view === "openings" && summer2027Only) || undergraduateOnly || newOnly}
               markedDuplicate={markedDuplicate}
               markingDuplicateId={markingDuplicateId}
               onMarkDuplicate={markDuplicate}
@@ -397,8 +403,9 @@ export function ScouterDashboard() {
   );
 }
 
-function OpeningsFeed({ openings, total, currentPage, pageCount, onPageChange, payload, refreshing, error, filtered, markedDuplicate, markingDuplicateId, onMarkDuplicate, onRestoreDuplicate, isCoop }: {
+function OpeningsFeed({ openings, total, currentPage, pageCount, onPageChange, payload, refreshing, error, filtered, markedDuplicate, markingDuplicateId, onMarkDuplicate, onRestoreDuplicate, isCoop, isFall }: {
   isCoop: boolean;
+  isFall: boolean;
   openings: Opening[];
   total: number;
   currentPage: number;
@@ -417,10 +424,10 @@ function OpeningsFeed({ openings, total, currentPage, pageCount, onPageChange, p
     <section className="feed" aria-labelledby="feed-heading">
       <div className="feed-meta">
         <div>
-          <h2 id="feed-heading">{isCoop ? "Co-ops & off-cycle internships" : "Open positions"}</h2>
+          <h2 id="feed-heading">{isFall ? "Fall openings" : isCoop ? "Co-ops & off-cycle internships" : "Open positions"}</h2>
           <p aria-live="polite">
             {refreshing && !payload
-              ? isCoop ? "Loading winter, spring, and fall 2027 openings." : "Loading undergraduate Summer 2027 openings."
+              ? isFall ? "Loading fall 2027 openings." : isCoop ? "Loading winter, spring, and fall 2027 openings." : "Loading undergraduate Summer 2027 openings."
               : error && !payload
                 ? "The opening feeds are unavailable. Try refresh."
                 : `${total} positions · ${payload?.sourcesChecked ?? 0}/${payload?.sourceCount ?? 0} sources · updated ${payload ? formatTime(payload.checkedAt) : "now"}`}
@@ -433,7 +440,7 @@ function OpeningsFeed({ openings, total, currentPage, pageCount, onPageChange, p
         </div>
         <span className="result-note">
           {total ? `${(currentPage - 1) * PAGE_SIZE + 1}–${Math.min(currentPage * PAGE_SIZE, total)} of ${total}` : "0 of 0"}
-          {filtered && ` · filtered from ${(isCoop ? payload?.coops : payload?.openings)?.length ?? 0}`}
+          {filtered && ` · filtered from ${(isFall ? payload?.coops.filter((opening) => opening.terms?.includes("fall")) : isCoop ? payload?.coops : payload?.openings)?.length ?? 0}`}
         </span>
       </div>
 
